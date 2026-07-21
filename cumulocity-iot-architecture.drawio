@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="site-architecture" name="全体構成(配置構成)">
-        <mxGraphModel dx="1880" dy="1232" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
+        <mxGraphModel dx="2396" dy="1572" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -377,7 +377,7 @@
         </mxGraphModel>
     </diagram>
     <diagram id="site-architecture-r1" name="全体構成(配置構成・レビュー反映)">
-        <mxGraphModel dx="1786" dy="1170" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
+        <mxGraphModel dx="1634" dy="1072" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -385,7 +385,7 @@
                     <mxGeometry height="640" width="620" x="40" y="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="wan" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontSize=14;fontStyle=1;dashed=1;dashPattern=4 4;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;arcSize=9;" value="閉域網" vertex="1">
-                    <mxGeometry height="754" width="150" x="690" y="40" as="geometry"/>
+                    <mxGeometry height="860" width="150" x="690" y="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="hq" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=10;fontSize=15;fontStyle=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;arcSize=2;" value="本社サーバールーム(オンプレ)" vertex="1">
                     <mxGeometry height="1010" width="780" x="870" y="40" as="geometry"/>
@@ -457,7 +457,7 @@
                     <mxGeometry height="60" width="220" x="930" y="540" as="geometry"/>
                 </mxCell>
                 <mxCell id="kc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;arcSize=17;" value="Keycloak(IdP)&lt;br&gt;SSO/OIDC&lt;div&gt;※共通インフラのためVM1配置&lt;/div&gt;" vertex="1">
-                    <mxGeometry height="60" width="220" x="930" y="620" as="geometry"/>
+                    <mxGeometry height="60" width="220" x="930" y="630" as="geometry"/>
                 </mxCell>
                 <mxCell id="otel" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;" value="Otelインフラ&#xa;(メトリクス/ログ/トレース収集)" vertex="1">
                     <mxGeometry height="60" width="220" x="1380" y="130" as="geometry"/>
@@ -522,8 +522,8 @@
                 <mxCell id="oa" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;" value="他アセット&#xa;(案件側アプリ 等)" vertex="1">
                     <mxGeometry height="70" width="210" x="1390" y="910" as="geometry"/>
                 </mxCell>
-                <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=10;fillColor=#f5f5f5;strokeColor=#999999;arcSize=5;" value="配置の要点&#xa;・IdP(Keycloak)はVM1: 全コンポーネントが依存する共通インフラのため、アセット層(VM2)のデプロイ・再起動の影響を受けない&#xa;・新機器(画像解析装置)はGateway(thin-edge.io)を内蔵しCumulocity Edgeへ直接送信。旧機器(画像センシングBOX)は改造不可のため外部Gateway経由&#xa;・外部GatewayはVM1(サーバールーム側): BOXがバッファ+再送機能を持つ前提で網断を吸収できるため、全拠点分を一元集約。&#xa;　再送に伴う重複イベントはBOXアダプタで排除(冪等化)&#xa;・画像解析装置はDocker Compose構成(フロントエンド/バックエンド/ログ処理/画像解析パイプライン)。現場管理端末はフロントエンド経由でアクセス&#xa;・Cumulocity Edge=デバイス管理がメイン。外部アクセスはREST/MQTT API経由(Operational Storeへの直接アクセスは不可)&#xa;・Operational Store=短期運用データ(〜90日目安)/オブジェクトストレージ=長期保存。オフロードはその移送&#xa;・紐づけ確認アプリ: Operational Storeのイベント情報(REST API)とVMS映像(Genetec)を突き合わせて確認&#xa;・スナップショット: 初期版はCumulocityイベント添付のみ(Operational Storeと同一MongoDB格納・保持期間で消える)。&#xa;　将来はオブジェクトストレージ本体+サムネイル添付へ移行(設計文書§4.6)&#xa;・特徴量: 画像解析パイプラインが抽出→ベクトルDB格納→AIモデル改善サービス(クラウド)へ本社発・限定アウトバウンドで送信&#xa;・モデル更新: 保守端末(基盤運用会社・保守VPN)がクラウドから改善モデルを取得→ソフトウェアリポジトリに登録→&#xa;　ソフトウェア更新オペレーションを既存の拠点発MQTT接続で配信→thin-edgeのsm-pluginが適用(失敗時ロールバック)&#xa;・配置判断(D17): 全拠点を単一Cumulocity Edge・単一テナントに集約(1顧客閉域)。拠点区分はグループ+Inventoryロール&#xa;・VM1/VM2は論理区画。実配置ではCumulocity Edgeは専用VM分離(GSCはWindows Server要件)&#xa;―→ 実線=通常データ経路(太線=閉域網を横断する定常データ経路)　┄→ 破線=テレメトリ/クラウド連携/制御等の補助経路" vertex="1">
-                    <mxGeometry height="270" width="620" x="40" y="875" as="geometry"/>
+                <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=10;fillColor=#f5f5f5;strokeColor=#999999;arcSize=4;" value="配置の要点&#xa;・IdP(Keycloak)はVM1: 全コンポーネントが依存する共通インフラのため、アセット層(VM2)のデプロイ・再起動の影響を受けない&#xa;・新機器(画像解析装置)はGateway(thin-edge.io)を内蔵しCumulocity Edgeへ直接送信。旧機器(画像センシングBOX)は改造不可のため外部Gateway経由&#xa;・外部GatewayはVM1(サーバールーム側): BOXがバッファ+再送機能を持つ前提で網断を吸収できるため、全拠点分を一元集約。&#xa;　再送に伴う重複イベントはBOXアダプタで排除(冪等化)&#xa;・画像解析装置はDocker Compose構成(フロントエンド/バックエンド/ログ処理/画像解析パイプライン)。現場管理端末はフロントエンド経由でアクセス&#xa;・Cumulocity Edge=デバイス管理がメイン。外部アクセスはREST/MQTT API経由(Operational Storeへの直接アクセスは不可)&#xa;・Operational Store=短期運用データ(〜90日目安)/オブジェクトストレージ=長期保存。オフロードはその移送&#xa;・紐づけ確認アプリ: Operational Storeのイベント情報(REST API)とVMS映像(Genetec)を突き合わせて確認&#xa;・スナップショット: 初期版はCumulocityイベント添付のみ(Operational Storeと同一MongoDB格納・保持期間で消える)。&#xa;　将来はオブジェクトストレージ本体+サムネイル添付へ移行(設計文書§4.6)&#xa;・特徴量: 画像解析パイプラインが抽出→ベクトルDB格納→AIモデル改善サービス(クラウド)へ本社発・限定アウトバウンドで送信&#xa;・モデル更新: 保守端末(基盤運用会社・保守VPN)がクラウドから改善モデルを取得→ソフトウェアリポジトリに登録→&#xa;　ソフトウェア更新オペレーションを既存の拠点発MQTT接続で配信→thin-edgeのsm-pluginが適用(失敗時ロールバック)&#xa;・配置判断(D17): 全拠点を単一Cumulocity Edge・単一テナントに集約(1顧客閉域)。拠点区分はグループ+Inventoryロール&#xa;・VM1/VM2は論理区画。実配置ではCumulocity Edgeは専用VM分離(GSCはWindows Server要件)&#xa;―→ 実線=通常データ経路(太線=閉域網を横断する定常データ経路)　┄→ 破線=テレメトリ/クラウド連携/制御等の補助経路" vertex="1">
+                    <mxGeometry height="245" width="620" x="40" y="900" as="geometry"/>
                 </mxCell>
                 <mxCell id="extgw" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontSize=12;fontStyle=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;arcSize=5;" value="外部Gateway(BOX用・全拠点分を集約)" vertex="1">
                     <mxGeometry height="130" width="520" x="930" y="390" as="geometry"/>
@@ -602,32 +602,33 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="e13" edge="1" parent="1" source="sa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;entryX=0.25;entryY=1;entryDx=0;entryDy=0;exitX=0;exitY=0.25;exitDx=0;exitDy=0;" target="kc" value="IdP連携&#xa;(顔認証結果の連携/OIDC)">
-                    <mxGeometry relative="1" x="-0.6149" y="10" as="geometry">
+                    <mxGeometry relative="1" x="-0.6644" y="10" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="880" y="927.52"/>
-                            <mxPoint x="880" y="700.04"/>
-                            <mxPoint x="985.04" y="700.04"/>
+                            <mxPoint x="880" y="927.55"/>
+                            <mxPoint x="880" y="705.09"/>
+                            <mxPoint x="985" y="705.09"/>
                         </Array>
                         <mxPoint x="930" y="800" as="sourcePoint"/>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="e14" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" target="kc" value="OIDC認証&#xa;(各アセット共通)">
-                    <mxGeometry relative="1" x="0.6204" as="geometry">
+                    <mxGeometry relative="1" x="0.3242" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1260" y="700.04"/>
-                            <mxPoint x="1095.04" y="700.04"/>
+                            <mxPoint x="1260" y="705.09"/>
+                            <mxPoint x="1095" y="705.09"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e15" edge="1" parent="1" source="oa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="otel" value="テレメトリ収集&lt;div&gt;(OTLP)&lt;br&gt;※VM1/VM2の各コンポーネント共通&lt;/div&gt;">
+                <mxCell id="e15" edge="1" parent="1" source="oa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="otel" value="テレメトリ収集&lt;div&gt;(OTLP)&lt;br&gt;※VM1/VM2の各コンポーネント共通&lt;/div&gt;">
                     <mxGeometry relative="1" x="0.8201" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1630" y="945"/>
-                            <mxPoint x="1630" y="259.96"/>
-                            <mxPoint x="1490" y="259.96"/>
+                            <mxPoint x="1547.55" y="880"/>
+                            <mxPoint x="1630" y="880"/>
+                            <mxPoint x="1630" y="260"/>
+                            <mxPoint x="1490" y="260"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
@@ -641,10 +642,10 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="opsco" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontSize=13;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;dashed=1;arcSize=13;" value="基盤運用(保守拠点)" vertex="1">
-                    <mxGeometry height="85" width="290" x="40" y="780" as="geometry"/>
+                    <mxGeometry height="85" width="270" x="60" y="780" as="geometry"/>
                 </mxCell>
                 <mxCell id="maintterm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#666666;" value="保守端末(ブラウザ)&#xa;モデル登録・更新操作" vertex="1">
-                    <mxGeometry height="40" width="250" x="60" y="815" as="geometry"/>
+                    <mxGeometry height="40" width="250" x="70" y="815" as="geometry"/>
                 </mxCell>
                 <mxCell id="e27" edge="1" parent="1" source="maintterm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="c8yui" value="モデル登録(ソフトウェアリポジトリ)+更新オペレーション発行&#xa;(保守VPN・HTTPS)">
                     <mxGeometry relative="1" x="0.6209" as="geometry">
@@ -711,11 +712,11 @@
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e21" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="gsc" value="該当映像の参照&#xa;(VMS抽象レイヤー経由)">
-                    <mxGeometry relative="1" x="0.7319" as="geometry">
+                <mxCell id="e21" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;" target="gsc" value="該当映像の参照&#xa;(VMS抽象レイヤー経由)">
+                    <mxGeometry relative="1" x="0.5464" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1310" y="570"/>
+                            <mxPoint x="1310" y="585"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
@@ -750,57 +751,60 @@
                         <mxPoint x="1254.96" y="1102.48" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="r1e40" edge="1" parent="1" source="evt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="oa" value="通知 Webhook/メール&#xa;(IF-H13)">
-                    <mxGeometry relative="1" as="geometry">
+                <mxCell id="r1e40" edge="1" parent="1" source="evt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;" target="oa" value="通知 Webhook/メール">
+                    <mxGeometry relative="1" x="-0.5995" as="geometry">
+                        <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1645" y="237"/>
-                            <mxPoint x="1645" y="880"/>
-                            <mxPoint x="1495" y="880"/>
+                            <mxPoint x="1640" y="223.82"/>
+                            <mxPoint x="1640" y="962.55"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="r1e41" edge="1" parent="1" source="mgmt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="lnk" value="アラーム閲覧(HTTPS・閉域網経由)&#xa;(IF-H13)">
-                    <mxGeometry relative="1" as="geometry">
+                <mxCell id="r1e41" edge="1" parent="1" source="mgmt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.117;entryY=0.002;entryDx=0;entryDy=0;entryPerimeter=0;" target="lnk" value="アラーム閲覧&lt;div&gt;(HTTPS・閉域網経由)&lt;/div&gt;">
+                    <mxGeometry relative="1" x="0.5389" y="10" as="geometry">
+                        <mxPoint as="offset"/>
                         <Array as="points">
                             <mxPoint x="155" y="250"/>
-                            <mxPoint x="280" y="250"/>
-                            <mxPoint x="280" y="705"/>
-                            <mxPoint x="855" y="705"/>
-                            <mxPoint x="855" y="880"/>
-                            <mxPoint x="1260" y="880"/>
+                            <mxPoint x="50" y="250"/>
+                            <mxPoint x="50" y="890"/>
+                            <mxPoint x="1183.36" y="890"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="r1e42" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" target="gsc" value="クリップ保存指示&#xa;(exportClip・IF-H14)">
-                    <mxGeometry relative="1" as="geometry">
+                <mxCell id="r1e42" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.614;exitY=0.002;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;exitPerimeter=0;" target="gsc" value="クリップ保存指示&lt;br&gt;(exportClip)">
+                    <mxGeometry relative="1" x="0.5538" y="4" as="geometry">
+                        <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1372" y="927"/>
-                            <mxPoint x="1372" y="610"/>
-                            <mxPoint x="1095" y="610"/>
+                            <mxPoint x="1282.82" y="616.09"/>
+                            <mxPoint x="1095" y="616.09"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="r1e43" edge="1" parent="1" source="gsc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="ostore" value="映像クリップ+サイドカーJSON&#xa;(S3互換・IF-H15)">
-                    <mxGeometry relative="1" as="geometry">
+                <mxCell id="r1e43" edge="1" parent="1" source="gsc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="ostore" value="映像クリップ+サイドカーJSON&lt;br&gt;(S3互換)">
+                    <mxGeometry relative="1" x="0.0488" y="40" as="geometry">
+                        <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1360" y="585"/>
+                            <mxPoint x="1360" y="555"/>
                             <mxPoint x="1360" y="760"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="r1e44" edge="1" parent="1" source="maintterm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.97;entryDx=0;entryDy=0;" target="vm1" value="メタ監視(外部死活監視)&#xa;(保守VPN・IF-F02)">
-                    <mxGeometry relative="1" as="geometry">
+                <mxCell id="r1e44" edge="1" parent="1" source="maintterm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0.001;entryY=0.93;entryDx=0;entryDy=0;entryPerimeter=0;" target="vm1" value="メタ監視(外部死活監視)&lt;br&gt;(保守VPN)">
+                    <mxGeometry relative="1" x="-0.0579" y="-5" as="geometry">
+                        <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="845" y="845"/>
-                            <mxPoint x="845" y="790"/>
+                            <mxPoint x="850" y="845"/>
+                            <mxPoint x="850" y="758.91"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="r1e45" edge="1" parent="1" source="tedge" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="cam" value="ONVIF/ICMP死活確認&#xa;(IF-S08)">
-                    <mxGeometry relative="1" as="geometry">
+                <mxCell id="r1e45" edge="1" parent="1" source="tedge" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" target="cam" value="ONVIF/ICMP&lt;div&gt;死活確認&lt;br&gt;&lt;/div&gt;">
+                    <mxGeometry relative="1" x="0.0287" as="geometry">
+                        <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="270" y="470"/>
-                            <mxPoint x="270" y="340"/>
+                            <mxPoint x="240" y="470"/>
+                            <mxPoint x="240" y="370"/>
+                            <mxPoint x="202.55" y="370"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
