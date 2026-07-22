@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="site-architecture" name="全体構成(配置構成)">
-        <mxGraphModel dx="2396" dy="1572" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
+        <mxGraphModel dx="1677" dy="1241" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -90,17 +90,6 @@
                 </mxCell>
                 <mxCell id="aicloud" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontSize=13;fontStyle=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;dashed=1;" value="AIモデル改善サービス(クラウド)" vertex="1">
                     <mxGeometry height="50" width="280" x="380" y="723.5" as="geometry"/>
-                </mxCell>
-                <mxCell id="e23" edge="1" parent="1" source="vapp" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;strokeWidth=2;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="特徴量(ベクトル)登録&#xa;(閉域網経由)">
-                    <mxGeometry relative="1" x="0.5141" as="geometry">
-                        <mxPoint as="offset"/>
-                        <Array as="points">
-                            <mxPoint x="305.04" y="347.52"/>
-                            <mxPoint x="305.04" y="710.04"/>
-                            <mxPoint x="830" y="710.04"/>
-                            <mxPoint x="830" y="760"/>
-                        </Array>
-                    </mxGeometry>
                 </mxCell>
                 <mxCell id="e30" edge="1" parent="1" source="vdb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="expjob" value="抽出">
                     <mxGeometry relative="1" x="-0.1177" as="geometry">
@@ -377,7 +366,7 @@
         </mxGraphModel>
     </diagram>
     <diagram id="site-architecture-r1" name="全体構成(配置構成・レビュー反映)">
-        <mxGraphModel dx="1634" dy="1072" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
+        <mxGraphModel dx="1677" dy="1241" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -385,10 +374,10 @@
                     <mxGeometry height="640" width="620" x="40" y="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="wan" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontSize=14;fontStyle=1;dashed=1;dashPattern=4 4;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;arcSize=9;" value="閉域網" vertex="1">
-                    <mxGeometry height="860" width="150" x="690" y="40" as="geometry"/>
+                    <mxGeometry height="880" width="150" x="690" y="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="hq" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=10;fontSize=15;fontStyle=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;arcSize=2;" value="本社サーバールーム(オンプレ)" vertex="1">
-                    <mxGeometry height="1010" width="780" x="870" y="40" as="geometry"/>
+                    <mxGeometry height="1090" width="780" x="870" y="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="cam" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#666666;" value="IPカメラ群&#xa;(ONVIF/RTSP, 〜数百台)" vertex="1">
                     <mxGeometry height="60" width="190" x="60" y="280" as="geometry"/>
@@ -427,7 +416,7 @@
                     <mxGeometry height="80" width="290" x="335" y="430" as="geometry"/>
                 </mxCell>
                 <mxCell id="vm1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontSize=12;fontStyle=1;fillColor=#fff2e0;strokeColor=#d79b00;strokeWidth=2;arcSize=2;" value="VM1(基盤インフラ層)" vertex="1">
-                    <mxGeometry height="730" width="720" x="900" y="80" as="geometry"/>
+                    <mxGeometry height="640" width="720" x="900" y="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="c8y" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=12;fontStyle=1;fillColor=#ffffff;strokeColor=#d79b00;strokeWidth=2;arcSize=4;" value="Cumulocity Edge" vertex="1">
                     <mxGeometry height="250" width="440" x="930" y="120" as="geometry"/>
@@ -453,31 +442,20 @@
                 <mxCell id="ei2" edge="1" parent="1" source="evt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" target="opst" value="格納">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="gsc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;" value="Genetec Security Center&#xa;(映像管理の中央統合)" vertex="1">
-                    <mxGeometry height="60" width="220" x="930" y="540" as="geometry"/>
+                <mxCell id="gsc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#666666;" value="Genetec Security Center&#xa;(映像管理の中央統合)" vertex="1">
+                    <mxGeometry height="60" width="220" x="1250" y="755" as="geometry"/>
                 </mxCell>
                 <mxCell id="kc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;arcSize=17;" value="Keycloak(IdP)&lt;br&gt;SSO/OIDC&lt;div&gt;※共通インフラのためVM1配置&lt;/div&gt;" vertex="1">
-                    <mxGeometry height="60" width="220" x="930" y="630" as="geometry"/>
+                    <mxGeometry height="60" width="220" x="930" y="545" as="geometry"/>
                 </mxCell>
                 <mxCell id="otel" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;" value="Otelインフラ&#xa;(メトリクス/ログ/トレース収集)" vertex="1">
-                    <mxGeometry height="60" width="220" x="1380" y="130" as="geometry"/>
+                    <mxGeometry height="40" width="180" x="1400" y="160" as="geometry"/>
                 </mxCell>
                 <mxCell id="vdb" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;boundedLbl=1;size=10.052215576171875;" value="ベクトルDB&#xa;(特徴量格納: イベントID/&#xa;モデルver.紐づけ)" vertex="1">
-                    <mxGeometry height="60" width="160" x="920" y="716" as="geometry"/>
+                    <mxGeometry height="60" width="160" x="920" y="636" as="geometry"/>
                 </mxCell>
                 <mxCell id="aicloud" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontSize=13;fontStyle=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;dashed=1;" value="AIモデル改善サービス(クラウド)" vertex="1">
-                    <mxGeometry height="50" width="280" x="380" y="723.5" as="geometry"/>
-                </mxCell>
-                <mxCell id="e23" edge="1" parent="1" source="vapp" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;strokeWidth=2;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="特徴量(ベクトル)登録&#xa;(閉域網経由)">
-                    <mxGeometry relative="1" x="0.5141" as="geometry">
-                        <mxPoint as="offset"/>
-                        <Array as="points">
-                            <mxPoint x="305.04" y="347.52"/>
-                            <mxPoint x="305.04" y="710.04"/>
-                            <mxPoint x="830" y="710.04"/>
-                            <mxPoint x="830" y="760"/>
-                        </Array>
-                    </mxGeometry>
+                    <mxGeometry height="50" width="280" x="380" y="720" as="geometry"/>
                 </mxCell>
                 <mxCell id="e30" edge="1" parent="1" source="vdb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="expjob" value="抽出">
                     <mxGeometry relative="1" x="-0.1177" as="geometry">
@@ -488,14 +466,12 @@
                     <mxGeometry relative="1" x="0.6495" y="1" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1182.52" y="785.04"/>
-                            <mxPoint x="770" y="785.04"/>
-                            <mxPoint x="770" y="748.52"/>
+                            <mxPoint x="1182.5" y="745"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="ostore" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;boundedLbl=1;size=10.052215576171875;" value="オブジェクトストレージ&#xa;(映像クリップ+メタデータ)" vertex="1">
-                    <mxGeometry height="60" width="220" x="1385" y="730" as="geometry"/>
+                    <mxGeometry height="60" width="170" x="1410" y="640" as="geometry"/>
                 </mxCell>
                 <mxCell id="vm2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontSize=12;fontStyle=1;fillColor=#fff2e0;strokeColor=#d79b00;strokeWidth=2;arcSize=6;" value="VM2(アセット層)" vertex="1">
                     <mxGeometry height="170" width="720" x="900" y="860" as="geometry"/>
@@ -503,13 +479,11 @@
                 <mxCell id="bionote" parent="1" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=middle;spacingLeft=8;fontSize=9;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" value="※生体情報(顔データ)の取り扱い: 保持期間・保存場所・持ち出し禁止範囲は個人情報保護の特記事項として設計文書で規定(要検討)" vertex="1">
                     <mxGeometry height="25" width="660" x="930" y="995" as="geometry"/>
                 </mxCell>
-                <mxCell id="e26" edge="1" parent="1" source="gsc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" target="sa" value="対象カメラ映像の取得&#xa;(顔判定用ストリーム)&#xa;※経路未確定(A9)">
-                    <mxGeometry relative="1" x="0.4849" as="geometry">
+                <mxCell id="e26" edge="1" parent="1" source="gsc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" target="sa" value="対象カメラ映像の取得&lt;br&gt;(顔判定用ストリーム)&lt;br&gt;※経路未確定">
+                    <mxGeometry relative="1" x="-0.2857" y="10" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="905.91" y="584.96"/>
-                            <mxPoint x="905.91" y="830"/>
-                            <mxPoint x="1080" y="830"/>
+                            <mxPoint x="1080" y="800"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
@@ -569,20 +543,20 @@
                     <mxGeometry relative="1" x="-0.0177" y="3" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="650" y="450.04"/>
-                            <mxPoint x="650" y="349.96"/>
-                            <mxPoint x="770" y="349.96"/>
-                            <mxPoint x="770" y="169.96"/>
+                            <mxPoint x="680" y="450"/>
+                            <mxPoint x="680" y="350"/>
+                            <mxPoint x="770" y="350"/>
+                            <mxPoint x="770" y="170"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e8" edge="1" parent="1" source="svms" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;" target="gsc" value="Genetec連携&lt;div&gt;(閉域網経由)&lt;/div&gt;">
-                    <mxGeometry relative="1" x="0.5675" as="geometry">
+                <mxCell id="e8" edge="1" parent="1" source="svms" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;strokeWidth=2;" target="gsc" value="Genetec連携&lt;div&gt;(閉域網経由)&lt;/div&gt;">
+                    <mxGeometry relative="1" x="0.1016" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="155.04" y="660"/>
-                            <mxPoint x="780" y="660"/>
-                            <mxPoint x="780" y="570"/>
+                            <mxPoint x="155" y="690"/>
+                            <mxPoint x="830" y="690"/>
+                            <mxPoint x="830" y="770"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
@@ -595,38 +569,40 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="e12" edge="1" parent="1" source="oa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="ostore" value="データ利用">
-                    <mxGeometry relative="1" as="geometry">
+                    <mxGeometry relative="1" x="0.619" as="geometry">
+                        <mxPoint as="offset"/>
                         <Array as="points">
                             <mxPoint x="1495" y="790"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e13" edge="1" parent="1" source="sa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;entryX=0.25;entryY=1;entryDx=0;entryDy=0;exitX=0;exitY=0.25;exitDx=0;exitDy=0;" target="kc" value="IdP連携&#xa;(顔認証結果の連携/OIDC)">
-                    <mxGeometry relative="1" x="-0.6644" y="10" as="geometry">
+                <mxCell id="e13" edge="1" parent="1" source="sa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;entryX=0.25;entryY=1;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" target="kc" value="IdP連携&lt;br&gt;(顔認証結果/OIDC)">
+                    <mxGeometry relative="1" x="0.7167" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="880" y="927.55"/>
-                            <mxPoint x="880" y="705.09"/>
-                            <mxPoint x="985" y="705.09"/>
+                            <mxPoint x="880" y="945"/>
+                            <mxPoint x="880" y="624.42"/>
+                            <mxPoint x="985" y="624.42"/>
                         </Array>
                         <mxPoint x="930" y="800" as="sourcePoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e14" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" target="kc" value="OIDC認証&#xa;(各アセット共通)">
-                    <mxGeometry relative="1" x="0.3242" as="geometry">
+                <mxCell id="e14" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.365;exitY=0.011;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;exitPerimeter=0;" target="kc" value="OIDC認証&#xa;(各アセット共通)">
+                    <mxGeometry relative="1" x="0.6015" y="-4" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1260" y="705.09"/>
-                            <mxPoint x="1095" y="705.09"/>
+                            <mxPoint x="1233" y="750"/>
+                            <mxPoint x="1270" y="750"/>
+                            <mxPoint x="1270" y="623.58"/>
+                            <mxPoint x="1095" y="623.58"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e15" edge="1" parent="1" source="oa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="otel" value="テレメトリ収集&lt;div&gt;(OTLP)&lt;br&gt;※VM1/VM2の各コンポーネント共通&lt;/div&gt;">
+                <mxCell id="e15" edge="1" parent="1" source="oa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="otel" value="テレメトリ収集&lt;div&gt;(OTLP)&lt;br&gt;※VM1/VM2の各コンポーネント共通&lt;/div&gt;">
                     <mxGeometry relative="1" x="0.8201" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1547.55" y="880"/>
-                            <mxPoint x="1630" y="880"/>
+                            <mxPoint x="1630" y="927.5"/>
                             <mxPoint x="1630" y="260"/>
                             <mxPoint x="1490" y="260"/>
                         </Array>
@@ -651,9 +627,9 @@
                     <mxGeometry relative="1" x="0.6209" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="860" y="835"/>
-                            <mxPoint x="860" y="25"/>
-                            <mxPoint x="1277.48" y="25"/>
+                            <mxPoint x="850" y="835"/>
+                            <mxPoint x="850" y="25"/>
+                            <mxPoint x="1277.5" y="25"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
@@ -682,13 +658,13 @@
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e19" edge="1" parent="1" source="alloy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="otel" value="ログ/メトリクス転送&#xa;(OTLP・閉域網経由)">
+                <mxCell id="e19" edge="1" parent="1" source="alloy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" target="otel" value="ログ/メトリクス転送&#xa;(OTLP・閉域網経由)">
                     <mxGeometry relative="1" x="-0.4028" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
                             <mxPoint x="710" y="265"/>
-                            <mxPoint x="710" y="109.96"/>
-                            <mxPoint x="1490" y="109.96"/>
+                            <mxPoint x="710" y="110"/>
+                            <mxPoint x="1445" y="110"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
@@ -703,21 +679,18 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="e20" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.25;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" target="c8yapi" value="イベント/アラーム参照&#xa;(REST API)">
-                    <mxGeometry relative="1" x="-0.7918" as="geometry">
+                    <mxGeometry relative="1" x="-0.4703" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="1210" y="850"/>
-                            <mxPoint x="890" y="850"/>
+                            <mxPoint x="1210" y="840"/>
+                            <mxPoint x="890" y="840"/>
                             <mxPoint x="890" y="190"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e21" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;" target="gsc" value="該当映像の参照&#xa;(VMS抽象レイヤー経由)">
-                    <mxGeometry relative="1" x="0.5464" as="geometry">
+                <mxCell id="e21" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.877;exitY=0.011;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;exitPerimeter=0;" target="gsc" value="該当映像の参照&#xa;(VMS抽象レイヤー経由)">
+                    <mxGeometry relative="1" x="0.7149" as="geometry">
                         <mxPoint as="offset"/>
-                        <Array as="points">
-                            <mxPoint x="1310" y="585"/>
-                        </Array>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="e25" edge="1" parent="1" source="aicloud" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" target="maintterm" value="改善モデル取得&#xa;(保守端末起点でDL)">
@@ -726,33 +699,31 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="expjob" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;fillColor=#ffffff;strokeColor=#d79b00;" value="特徴量エクスポートジョブ&lt;br&gt;(合意範囲の選択・監査ログ)" vertex="1">
-                    <mxGeometry height="55" width="135" x="1115" y="718.5" as="geometry"/>
+                    <mxGeometry height="55" width="135" x="1115" y="638.5" as="geometry"/>
                 </mxCell>
                 <mxCell id="e31" edge="1" parent="1" source="maintterm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;dashed=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" target="expjob" value="エクスポート承認・実行指示&#xa;(保守VPN)">
-                    <mxGeometry relative="1" x="-0.4652" as="geometry">
+                    <mxGeometry relative="1" x="-0.4649" y="-10" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="345.04" y="825.04"/>
-                            <mxPoint x="345.04" y="800"/>
-                            <mxPoint x="1216.26" y="800"/>
+                            <mxPoint x="345" y="825"/>
+                            <mxPoint x="345" y="780"/>
+                            <mxPoint x="1216.33" y="780"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="92zj5_l4l3xbU29xb8-P-2" edge="1" parent="1" source="vapp" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0;entryDx=0;entryDy=20.026107788085938;entryPerimeter=0;strokeWidth=2;" target="vdb" value="特徴量(ベクトル)登録&#xa;(閉域網経由)">
-                    <mxGeometry relative="1" x="0.5046" as="geometry">
+                    <mxGeometry relative="1" x="0.5055" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="670" y="334.96"/>
-                            <mxPoint x="670" y="700"/>
-                            <mxPoint x="830" y="700"/>
-                            <mxPoint x="830" y="736"/>
+                            <mxPoint x="670" y="335"/>
+                            <mxPoint x="670" y="656"/>
                         </Array>
                         <mxPoint x="594.96" y="700.48" as="sourcePoint"/>
                         <mxPoint x="1254.96" y="1102.48" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="r1e40" edge="1" parent="1" source="evt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;" target="oa" value="通知 Webhook/メール">
-                    <mxGeometry relative="1" x="-0.5995" as="geometry">
+                <mxCell id="r1e40" edge="1" parent="1" source="evt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;" target="oa" value="通知 Webhook">
+                    <mxGeometry relative="1" x="-0.6333" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
                             <mxPoint x="1640" y="223.82"/>
@@ -761,7 +732,7 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="r1e41" edge="1" parent="1" source="mgmt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.117;entryY=0.002;entryDx=0;entryDy=0;entryPerimeter=0;" target="lnk" value="アラーム閲覧&lt;div&gt;(HTTPS・閉域網経由)&lt;/div&gt;">
-                    <mxGeometry relative="1" x="0.5389" y="10" as="geometry">
+                    <mxGeometry relative="1" x="0.5388" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
                             <mxPoint x="155" y="250"/>
@@ -771,30 +742,22 @@
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="r1e42" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.614;exitY=0.002;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;exitPerimeter=0;" target="gsc" value="クリップ保存指示&lt;br&gt;(exportClip)">
-                    <mxGeometry relative="1" x="0.5538" y="4" as="geometry">
+                <mxCell id="r1e42" edge="1" parent="1" source="lnk" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.614;exitY=0.002;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;exitPerimeter=0;" target="gsc" value="クリップ保存指示&lt;br&gt;(exportClip)">
+                    <mxGeometry relative="1" x="0.5738" y="15" as="geometry">
                         <mxPoint as="offset"/>
-                        <Array as="points">
-                            <mxPoint x="1282.82" y="616.09"/>
-                            <mxPoint x="1095" y="616.09"/>
-                        </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="r1e43" edge="1" parent="1" source="gsc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="ostore" value="映像クリップ+サイドカーJSON&lt;br&gt;(S3互換)">
-                    <mxGeometry relative="1" x="0.0488" y="40" as="geometry">
+                <mxCell id="r1e43" edge="1" parent="1" source="gsc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="ostore" value="映像クリップ+サイドカーJSON&lt;br&gt;(S3互換)">
+                    <mxGeometry relative="1" x="-0.6296" as="geometry">
                         <mxPoint as="offset"/>
-                        <Array as="points">
-                            <mxPoint x="1360" y="555"/>
-                            <mxPoint x="1360" y="760"/>
-                        </Array>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="r1e44" edge="1" parent="1" source="maintterm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0.001;entryY=0.93;entryDx=0;entryDy=0;entryPerimeter=0;" target="vm1" value="メタ監視(外部死活監視)&lt;br&gt;(保守VPN)">
-                    <mxGeometry relative="1" x="-0.0579" y="-5" as="geometry">
+                    <mxGeometry relative="1" x="-0.2272" y="-5" as="geometry">
                         <mxPoint as="offset"/>
                         <Array as="points">
-                            <mxPoint x="850" y="845"/>
-                            <mxPoint x="850" y="758.91"/>
+                            <mxPoint x="860" y="845"/>
+                            <mxPoint x="860" y="675.17"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
@@ -806,6 +769,42 @@
                             <mxPoint x="240" y="370"/>
                             <mxPoint x="202.55" y="370"/>
                         </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="zo_Jzf9s1uvS9JdkQMCw-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;" value="運用知識基盤" vertex="1">
+                    <mxGeometry height="30" width="70" x="1540" y="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="zo_Jzf9s1uvS9JdkQMCw-2" edge="1" parent="1" source="otel" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=0.628;exitY=-0.071;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitPerimeter=0;" target="zo_Jzf9s1uvS9JdkQMCw-1" value="テレメトリ">
+                    <mxGeometry relative="1" x="-0.3141" y="-17" as="geometry">
+                        <mxPoint as="offset"/>
+                        <mxPoint x="1390" y="397.52" as="sourcePoint"/>
+                        <mxPoint x="2270" y="292.52" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="zo_Jzf9s1uvS9JdkQMCw-3" edge="1" parent="1" source="zo_Jzf9s1uvS9JdkQMCw-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;exitX=0.882;exitY=0.986;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;exitPerimeter=0;" target="oa" value="テレメトリ">
+                    <mxGeometry relative="1" x="0.5876" y="-12" as="geometry">
+                        <mxPoint as="offset"/>
+                        <Array as="points">
+                            <mxPoint x="1601.67" y="880"/>
+                            <mxPoint x="1547.5" y="880"/>
+                        </Array>
+                        <mxPoint x="1710" y="200" as="sourcePoint"/>
+                        <mxPoint x="1737" y="148" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="zo_Jzf9s1uvS9JdkQMCw-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#666666;" value="業務端末&lt;br&gt;(ブラウザ)" vertex="1">
+                    <mxGeometry height="50" width="150" x="1470" y="1060" as="geometry"/>
+                </mxCell>
+                <mxCell id="zo_Jzf9s1uvS9JdkQMCw-6" edge="1" parent="1" source="zo_Jzf9s1uvS9JdkQMCw-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" target="c8yui" value="HTTPS&#xa;(閲覧・操作)">
+                    <mxGeometry relative="1" x="0.7433" as="geometry">
+                        <mxPoint as="offset"/>
+                        <Array as="points">
+                            <mxPoint x="1660" y="1085"/>
+                            <mxPoint x="1660" y="60"/>
+                            <mxPoint x="1316.33" y="60"/>
+                        </Array>
+                        <mxPoint x="1670" y="1060" as="sourcePoint"/>
+                        <mxPoint x="1680" y="450" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
             </root>
