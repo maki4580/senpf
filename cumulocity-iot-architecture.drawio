@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="site-architecture" name="全体構成(配置構成)">
-        <mxGraphModel dx="1677" dy="1241" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
+        <mxGraphModel dx="1688" dy="1266" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -366,7 +366,7 @@
         </mxGraphModel>
     </diagram>
     <diagram id="site-architecture-r1" name="全体構成(配置構成・レビュー反映)">
-        <mxGraphModel dx="1677" dy="1241" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
+        <mxGraphModel dx="1688" dy="1266" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
