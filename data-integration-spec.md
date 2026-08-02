@@ -10,7 +10,8 @@
   - [data-integration-spec_new.md](data-integration-spec_new.md) — 実装方式・処理手順の詳細(処理フロー図・重複排除キー設計・再送機構等のHow)
   - API仕様書(IF単位・**未作成**。対象製品確定後に作成) — エンドポイント・スキーマ(型/桁/必須)・ステータスコード・エラー応答の物理仕様。機械可読化はREST系=OpenAPI、MQTT系(IF-S04/W01/H01/H02)=AsyncAPI 3.0(MQTT bindings)を採用予定
   - [research-findings-2026-08-01.md](research-findings-2026-08-01.md) — 技術調査第1回(検証済み19件。断定記載の根拠)
-  - [research-findings-2026-08-02.md](research-findings-2026-08-02.md) — 技術調査第2回(一次情報引用付き・未検証。「🔍出典確認推奨」記載の根拠と引用元URL)
+  - [research-findings-2026-08-02.md](research-findings-2026-08-02.md) — 技術調査第2回(検証確定23件+引用付き未検証。「✅検証確定」「🔍出典確認推奨」記載の根拠と引用元URL)
+  - [vendor-questions-cumulocity.md](vendor-questions-cumulocity.md) — **Cumulocity社への確認事項一覧(V1〜V16)**。公開情報で確定できずベンダー回答を待つ事項。§5の未確定事項(N6/N8等)のうち技術調査で解決不能なものはここに集約
 - **節参照の表記規則**: 無修飾の `§X.Y` は**本書の節**を指す。他文書の節を参照する場合は文書を明示し、[architecture-camera-monitoring.md](architecture-camera-monitoring.md) は「**構成設計§X.Y**」、[design-decisions.md](design-decisions.md) は「**D番号**」と表記する(本書と構成設計は §4.2/§4.3/§4.6/§4.7 等が別内容のため、無修飾参照は禁止)
 
 ---
