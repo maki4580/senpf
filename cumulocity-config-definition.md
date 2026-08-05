@@ -6,10 +6,13 @@
 | 第2版 | 2026-08-04 | Cumulocity Edge での適用可否（検証済み）と、初期コンテンツ注入段階（デバイス/ルール/ダッシュボード等）を追記（deep-research 2回目: 情報源21件・主張99件抽出・25件検証・確定23/棄却2。※コンテンツ注入系の主張は検証枠外となったため journal から救出し「未検証」マーク付きで記載） |
 | 第3版 | 2026-08-04 | 付録A「カテゴリ別 設定項目一覧」を追加。公式ドキュメント10ページを直接取得し、個別設定項目をカテゴリごとに列挙 |
 | 第4版 | 2026-08-04 | 網羅性検証のdeep-research（3回目: 確定24主張・棄却1）を反映。漏れていたカテゴリ（SSO / Data broker / Usage statistics・課金 / アラームマッピング / デバイス可用性 / ユーザー管理設定 / c8yedge CLI・Edge運用）を付録Aに追加し、既定値・許容値などの具体値を全カテゴリで補強 |
+| **第5版** | **2026-08-05** | **[§10 第5版追補](#10-第5版追補--openapi-一次仕様ファイルの直読により確定した事項2026-08-05) を追加**（deep-research 4回目: 情報源26件・主張129件抽出・25件検証・確定17/棄却8＋一次仕様ファイル直読）。**Redoc SPA 問題により過去にEdge関連の主張が誤って棄却されていたことを訂正**し、Edge専用REST API全18本を仕様から確定。EPLアプリのREST API、`c8y-analytics` によるAnalytics Builder自動化、go-c8y-cliのカバレッジ、authConfig完全スキーマ、**ラウンドトリップ不可能な設定（`<<Encrypted>>` / `editable=false`）**を追加。§7未解決事項12件のうち3件解消・4件部分解消 |
 
-情報源: cumulocity.com 公式ドキュメント（2024/2025/2026リリース版）、OpenAPI仕様、Cumulocity-IoT 公式GitHubリポジトリ、コミュニティフォーラム
+情報源: cumulocity.com 公式ドキュメント（2024/2025/2026リリース版）、OpenAPI仕様（**第5版で生仕様ファイルを直接取得**）、Cumulocity-IoT 公式GitHubリポジトリ、コミュニティフォーラム
 
 **検証状態の凡例**: ✅ = 反証検証を通過した確定事項（票数併記） / ⚠️未検証 = 一次ソースから引用付きで抽出済みだが反証検証を未実施（採用前に実機確認を推奨） / 📄 = 公式ドキュメント直接参照（2026-08-04取得。付録Aで使用）
+
+> ⚠️ **第4版までの読者への注意**: §3.7（旧VM版Edgeの構成チャネル）と §4.3〜4.4（スマートルール／Analytics Builder／EPL）は、**§10 の追補で内容が大幅に更新・訂正されている**。該当箇所を参照する際は必ず §10 を併読すること。
 
 > **個別の設定項目レベルの一覧は [付録A: カテゴリ別 設定項目一覧](#付録a-カテゴリ別-設定項目一覧) を参照。**
 >
@@ -450,6 +453,472 @@ Cockpit組み込みのエクスポート機能（CSV/Excel、スケジュール�
 - https://tech.forums.softwareag.com/t/cumulocity-migration-tool/237289 — Migration Tool CORS問題
 - https://developer.ntt.com/iot/docs/reference/retention-rules/ — NTT Things Cloud（OEM）のRetention rules APIリファレンス（裏付け）
 - github.com/ButKor/c8y-usergroup-migration — ロール移行のコミュニティ実装例
+
+### 一次仕様ファイル（第5版で直接取得・2026-08-05）
+- **https://cumulocity.com/api/core/dist/c8y-oas.yml** — Core Platform OpenAPI 生仕様（3.0.3 / `info.version: Latest` / 約1.4MB・33,598行）※ `https://cumulocity.com/api/core/` はRedoc SPAシェルのみを返すため必ずこちらを取得すること
+- **https://cumulocity.com/api/edge/10.18.0/dist/c8y-edge-oas.json** — Cumulocity Edge OpenAPI 生仕様（3.0.3 / `Release 10.18.0` / 約128KB）
+- https://cumulocity.com/api/ — 仕様インデックス（Core / DataHub / Data Preparation / DTM / Edge の5カテゴリ）
+
+### 第5版で追加した出典
+- https://cumulocity.com/docs/streaming-analytics/epl-apps/ — EPLアプリ（`/service/cep/eplfiles`）
+- https://github.com/Cumulocity-IoT/apama-eplapps-tools — `eplapp.py` CLI・PySysテスト・CI/CD（Apache 2.0・as-is）
+- https://github.com/Cumulocity-IoT/c8y-analytics — go-c8y-cli 拡張（Analytics Builder / EPL / Apama管理）
+- https://github.com/Cumulocity-IoT/cumulocity-analytics-management — AB拡張（ブロック）の管理・GitHubからの動的ビルド
+- https://github.com/Cumulocity-IoT/cumulocity-provision-sso — 親→子テナントのSSO設定複製マイクロサービス
+- https://cumulocity.com/docs/streaming-analytics/analytics-customization/ — `streaminganalytics` テナントオプション・Apama-ctrl必要ロール
+- https://cumulocity.com/docs/cockpit/smart-rules-collection/ — 組み込みスマートルールテンプレート11種・変数一覧
+- https://cumulocity.com/docs/streaming-analytics/smart-rules-plugin/ — Smart rules (NEW) プラグイン
+- http://resources.cumulocity.com/documentation/javasdk/1007.5.0/com/cumulocity/rest/representation/cep/SmartRuleRepresentation.html — `c8y_SmartRule` フラグメント構造
+- https://api.github.com/repos/reubenmiller/go-c8y-cli/contents/api/spec/yaml — go-c8y-cli コマンド仕様ファイル全65件
+- https://api.github.com/repos/reubenmiller/go-c8y-cli/releases/tags/v2.54.0 — SSO（Authorization Code / Device Flow / Device Certificate）対応
+- https://goc8ycli.netlify.app/docs/concepts/paging/ — `--includeAll` の挙動
+- https://github.com/AdeelChohan/Cumulocity-Postman-V2-Collection — Postman V2 collection（コミュニティ製・公式は保守終了）
+
+---
+
+## 10. 第5版追補 — OpenAPI 一次仕様ファイルの直読により確定した事項（2026-08-05）
+
+> 本節は 4回目の deep-research（情報源26件・主張129件抽出・25件検証・確定17/棄却8）と、その後に実施した**一次仕様ファイルの直接取得**に基づく。第4版までで「未確定」「棄却」とされていた事項のうち、いくつかは**検証手法の欠陥による誤った棄却**だったことが判明したため、本節で訂正・確定させる。
+
+### 10.1 【最重要】検証手法の落とし穴 — Redoc SPA 問題
+
+`https://cumulocity.com/api/core/` および `https://cumulocity.com/api/edge/10.18.0/` は **Redoc の SPA シェル**であり、HTTPフェッチしても約4KBのローダHTMLしか返らない。ブラウザ上でJavaScriptが仕様ファイルを読み込んで初めて内容が描画される。
+
+**このため「URLを開いて確認した」という検証は成立せず、第4版までの Edge 固有API に関する主張が3票検証で軒並み棄却された（0-3 / 1-2）。棄却は「そのAPIが存在しない」ことの証明ではなく、「提示URLから再現できなかった」だけだった。**
+
+仕様の検証には**必ず生ファイルを直接取得**すること:
+
+| 対象 | 生仕様ファイルURL | 形式・規模 |
+|------|-----------------|-----------|
+| Core Platform | `https://cumulocity.com/api/core/dist/c8y-oas.yml` | OpenAPI 3.0.3 / `info.version: Latest` / 約1.4MB・33,598行 |
+| Edge（VMアプライアンス世代） | `https://cumulocity.com/api/edge/10.18.0/dist/c8y-edge-oas.json` | OpenAPI 3.0.3 / `info.version: Release 10.18.0` / 約128KB |
+
+（Redocの `Redoc.init("dist/c8y-edge-oas.json", …)` 呼び出しがHTMLソース中にあり、そこから相対パスを特定できる。）
+
+`https://cumulocity.com/api/` のインデックスは5カテゴリ構成 — Core platform（`./core`, `./core/2026`, `./core/2025`）、DataHub、Data Preparation、DTM、**Edge（`./edge/10.18.0` のみ。年次併記なし＝Edgeは別バージョン軸）**。✅ 3-0
+
+---
+
+### 10.2 Edge 専用 REST API — 全18エンドポイントを仕様から確定（§3.7 の全面差し替え）
+
+第4版 §3.7 では「旧VM版Edge固有の構成チャネル」として概略のみ記載していたが、生仕様の直読により**全エンドポイント・全リクエストスキーマ・認証モデル・非同期実行モデルが確定した**。
+
+> **適用範囲の注意**: この `/edge/...` API は **Release 10.18.0（VMアプライアンス世代）** の仕様である。K8sネイティブ世代（2025/2026）については Edge CR が主たる注入層であり（§3.3）、`/edge/...` API の継承有無は本仕様ファイルからは判断できない。**採用前に、導入対象のEdge世代で該当エンドポイントが生きているか実機確認すること。**
+
+#### 10.2.1 エンドポイント一覧（全18）
+
+| パス | メソッド | 用途 | 認証 |
+|------|---------|------|------|
+| `/edge/install` | POST | 初期インストール実行 | **不要** |
+| `/edge/tasks/latest-installation` | GET | 直近インストールの情報取得 | **不要** |
+| `/edge/configuration/domain` | GET / POST | ドメイン名の取得・変更（GETはインストール成功後のみ） | **不要** |
+| `/edge/configuration/network` | GET / POST | ネットワーク構成 | 要（※インストール前は不要） |
+| `/edge/tasks/{id}` | GET | タスク進捗の取得 | 要（※インストール前は不要） |
+| `/edge/tasks/{id}/log` | GET | タスクログの取得 | 要（※インストール前は不要） |
+| `/edge/version` | GET | 現在のEdgeバージョン（インストール成功後のみ） | 要 |
+| `/edge/update` | POST | Edgeのバージョン更新 | 要 |
+| `/edge/reboot` | POST | アプライアンス再起動 | 要 |
+| `/edge/expand-disk` | POST | インストールディスク／データディスクの拡張 | 要 |
+| `/edge/configuration/hostname` | GET / POST | ホスト名 | 要 |
+| `/edge/configuration/time-sync` | GET / POST | 時刻同期（NTP） | 要 |
+| `/edge/configuration/microservices` | GET / POST | マイクロサービスホスティングの有効化 | 要（**"Tenant Manager" ロール必須**） |
+| `/edge/configuration/remote-connectivity` | GET / POST | リモートデバイス管理 | 要 |
+| `/edge/configuration/certificate` | GET / POST | SSL証明書の有効性確認・更新 | 要 |
+| `/edge/configuration/security` | GET / POST | OS／Kubernetes セキュリティ設定 | 要 |
+| `/edge/diagnostics` | POST | 診断レポート作成の要求 | 要 |
+| `/edge/diagnostics/{id}` | GET | 診断レポートのダウンロードURL取得 | 要 |
+
+サーバURL: `https://<MY_OWN_DOMAIN>`（インストール前は自己署名証明書がIPアドレス向けのため、URLにはIPアドレスを使う。例 `https://192.168.66.10/edge/tasks/latest-installation`。インストール中に証明書がドメイン名向けに切り替わる）
+
+#### 10.2.2 認証モデル
+
+Management テナントによる **Basic認証**。ユーザー名に `management/` を前置する:
+
+```bash
+echo -n management/admin:password | base64
+# → Authorization: Basic bWFuYWdlbWVudC9hZG1pbjpwYXNzd29yZA==
+```
+
+インストール前に限り、`/edge/tasks/latest-installation` `/edge/install` `/edge/configuration/network` `/edge/tasks/{id}` `/edge/tasks/{id}/log` は認証不要。`/edge/configuration/domain` は常に認証不要。
+
+#### 10.2.3 非同期タスクモデル（自動投入スクリプトの設計制約）
+
+- **POSTはすべてバックグラウンドタスクを起動し、タスクIDを返す**。進捗は `GET /edge/tasks/{id}`、詳細ログは `GET /edge/tasks/{id}/log` でポーリングする
+- **タスクの同時実行は不可。実行中に別タスクを投げると HTTP 409 が返る**
+  → **バッチ投入スクリプトは「逐次実行＋完了ポーリング」が必須**。並列化してはならない
+- 上記2点は仕様書の Introduction に `>**Important:** You cannot run two tasks at the same time. If you attempt to run a task when another task is in progress, then you will get a HTTP status 409.` として明記
+
+#### 10.2.4 ファイルアップロードの規則（ライセンス・証明書・更新アーカイブ）
+
+- アップロード先URLは**タスク作成レスポンスの `uploads` 配列から読み取る**。`The URL layout is not static and can change anytime.` `You must not construct the URL.` — **URLを自前で組み立ててはならない**
+- ヘッダ: `Content-Type: application/octet-stream` / `Content-Disposition: attachment; filename="<filename>"`（**ファイル名のみ。パスを含めてはならない**）
+- **タイムアウト10秒**（タスク作成時、または最後にバイトを受信した時点から）。超過すると HTTP 404
+  → **大きなファイル（`/edge/update` のアーカイブ等）はHTTPクライアントが全体をメモリにロードしてから送る実装だとタイムアウトする**。ファイルから直接ストリームすること。これができない場合は先にメモリへ読み込んでからエンドポイントを呼ぶ
+- 応答: 成功201 / 同一タスクで再アップロードまたは `Content-Disposition` 不正は400 / タイムアウト超過は404
+
+#### 10.2.5 リクエストJSONスキーマ（設定項目の実体）
+
+**`POST /edge/install`** — インストール自体をJSONで自動化できる
+
+```json
+{
+  "admin":        { "username": "…", "password": "…" },
+  "root_password": "…",
+  "edge_admin":   { "username": "…", "password": "…", "email": "…" },
+  "domain_name":  "myown.iot.com",
+  "certificate":  "generate"          // generate | upload
+}
+```
+レスポンスはタスクIDと、ライセンス／証明書ファイルのアップロード先URL配列を返す。**このPOSTだけではインストールは始まらず、続けてライセンスと証明書をアップロードして初めて開始する**。インストール成功後、このエンドポイントは利用不可になる（失敗した場合は残るので再試行できる）。
+
+**`POST /edge/configuration/network`**
+```json
+{ "address": "…", "netmask": "…", "gateway": "…", "dns": "…", "ip_range": "…" }
+```
+⚠️ `10.244.0.0` と `10.96.0.0` はEdge内部予約のため使用不可。
+
+**`POST /edge/configuration/hostname`** → `{ "hostname": "…" }`
+
+**`POST /edge/configuration/domain`** → `{ "domain_name": "…", "certificate": "generate" | "upload" }`
+
+**`POST /edge/configuration/time-sync`** → `{ "enabled": bool, "interval_power_of_two": number, "servers": [ … ] }`
+
+**`POST /edge/configuration/microservices`** → `{ "enabled": bool }`（"Tenant Manager" ロール必須。実行中アプライアンスは一時停止）
+
+**`POST /edge/configuration/remote-connectivity`** → `{ "enabled": bool, "remote_tenant_url": "…" }`
+
+**`POST /edge/configuration/certificate`** → `{ "renewal_type": "generate" | "upload" }`
+
+**`POST /edge/update`** → `{ "type": "…" }`
+
+**`POST /edge/configuration/security`** — クラウド版に相当物がないOS/K8sレベル設定
+
+```json
+{
+  "OS": {
+    "login_banner": "…",
+    "login_sessions_inactivity_timeout_seconds": 600,
+    "rsyslog":  { "server": "…", "port": 514, "protocol": "TCP" },   // TCP | UDP
+    "audisp":   { "server": "…", "port": 60 },
+    "ssh_enabled": true,
+    "selinux_mode": "permissive",        // permissive | enforcing
+    "audit_logging_enabled": false
+  },
+  "kubernetes": {
+    "audit_policy": {
+      "level": "None",                   // None | Metadata | Request | RequestResponse
+      "max_size": 0, "max_backup": 0, "max_age": 0
+    }
+  }
+}
+```
+> ⚠️ **`audit_logging_enabled` は不可逆**。`Once enabled, you cannot disable the audit logging configuration.` — 設定定義ファイルの既定値設計時に要注意。
+
+出典: `https://cumulocity.com/api/edge/10.18.0/dist/c8y-edge-oas.json`（2026-08-05取得・全パス／全requestBodyスキーマを機械的に列挙して確認）
+
+---
+
+### 10.3 Core API — 設定投入に関わるエンドポイント目録（仕様から機械抽出・全149パス中の該当分）
+
+`c8y-oas.yml` の `paths:` を全件抽出した結果。**設定注入スクリプトが叩く先はこの範囲で尽きている**（スマートルール・Analytics Builder・Apama EPL は Core 仕様に**含まれない** → §10.6〜10.8）。
+
+| 領域 | エンドポイント |
+|------|--------------|
+| テナント設定 | `/tenant/options`、`/tenant/options/{category}`、`/tenant/options/{category}/{key}`、`/tenant/options/{category}/{key}/editable`、`/tenant/system/options`、`/tenant/system/options/{category}/{key}` |
+| テナント本体 | `/tenant/tenants`、`/tenant/currentTenant`、`/tenant/tenants/{tenantId}`、`/tenant/tenants/{tenantId}/applications`、同 `/{applicationId}`、`/tenant/tenants/{tenantId}/applications/restricted-roles`（+`/{roleId}`） |
+| 認証・SSO | `/tenant/loginOptions`、`/tenant/loginOptions/{typeOrId}`、`…/accessMappings`（+`/{id}`）、`…/inventoryAccessMappings`（+`/{id}`）、`…/restrict`、`/tenant/oauth`、`/tenant/oauth/token`、`/tenant/oauth/certificate` |
+| TFA | `/tenant/tenants/{tenantId}/tfa`、`/user/{tenantId}/users/{userId}/tfa`、`/user/currentUser/totpSecret`（+`/activity`、`/verify`） |
+| 証明書 | `/tenant/tenants/{tenantId}/trusted-certificates`（+`/bulk`、`/{fingerprint}`）、`/tenant/tenants/{tenantId}/trusted-certificates-pop/{fingerprint}/{pop\|confirmed\|verification-code}`、`/tenant/trusted-certificates/verify-cert-chain`、`/tenant/trusted-certificates/settings/crl`、`/certificate-authority`、`/certificate-authority/renew`、`/.well-known/est/simpleenroll`、`/.well-known/est/simplereenroll` |
+| ユーザー・ロール | `/user/roles`、`/user/roles/{name}`、`/user/inventoryroles`（+`/{id}`）、`/user/devicePermissions/{id}`、`/user/{tenantId}/users`（+`/{userId}`）、`/user/{tenantId}/groups`（+`/{groupId}`、`/{groupId}/roles`、`/{groupId}/roles/{roleId}`、`/{groupId}/users`）、`/user/{tenantId}/users/{userId}/{groups\|roles\|roles/inventory}`、`/user/{tenantId}/userByName/{username}`、`/user/{tenantId}/groupByName/{groupName}`、`/user/logout`、`/user/logout/{tenantId}/allUsers`、`/user/currentUser`、`/user/currentUser/password` |
+| データ保持 | `/retention/retentions`、`/retention/retentions/{id}` |
+| 通知 | `/notification2/subscriptions`（+`/{id}`）、`/notification2/token`、`/notification2/unsubscribe`、`/notification/realtime` |
+| フィーチャートグル | `/features`、`/features/{featureKey}`、`/features/{featureKey}/by-tenant`（+`/{tenantId}`） |
+| アプリケーション | `/application/applications`（+`/{id}`、`/{id}/binaries`、`/{id}/versions`、`/{id}/clone`、`/{id}/bootstrapUser`）、`/application/applicationsBy{Name\|Tenant\|Owner\|User}/…`、`/application/currentApplication`（+`/settings`、`/subscriptions`） |
+| 統計・課金 | `/tenant/statistics`（+`/summary`、`/allTenantsSummary`、`/files`、`/files/{id}`、`/files/latest/{month}`）、`/tenant/statistics/device/{tenantId}/{monthly\|daily}/{date}` |
+| デバイス登録・資格情報 | `/devicecontrol/deviceCredentials`、`/devicecontrol/newDeviceRequests`（+`/{requestId}`）、`/devicecontrol/bulkNewDeviceRequests`、`/devicecontrol/deviceAccessToken` |
+| その他（設定の器） | `/inventory/managedObjects`（ダッシュボード・スマートルール・ABモデル等の実体）、`/identity/…`、`/audit/auditRecords`、`/alarm/alarms`、`/event/events`、`/measurement/measurements` |
+
+出典: `https://cumulocity.com/api/core/dist/c8y-oas.yml`（2026-08-05取得・`paths:` を全件抽出）
+
+---
+
+### 10.4 テナントオプション API の仕様上の確定事項
+
+- **モデル**: `Options are category-key-value tuples which store tenant configurations. Some categories of options allow the creation of new ones, while others are limited to predefined set of keys.` — カテゴリによっては新規キー作成が可能、カテゴリによっては定義済みキー限定 ✅ 3-0
+- **必要ロール**: 更新 `ROLE_OPTION_MANAGEMENT_ADMIN` / 参照 `ROLE_OPTION_MANAGEMENT_READ`
+- **一括更新**: `PUT /tenant/options/{category}` でカテゴリ単位の一括更新（`updateOptionsByCategory`）。**設定定義ファイルをカテゴリ単位のJSONで保持する設計と直接対応する**
+- 仕様書に例示されている既定カテゴリ: `access.control`（キー `allow.origin`、既定値 `*`、定義済みキー限定）、`alarm.type.mapping`（`<ALARM_TYPE>` をキーに `severity|text` を上書き、新規キー作成可）
+
+---
+
+### 10.5 【設計上の重要制約】ラウンドトリップ不可能な設定 — 「全設定をJSONダンプして別テナントに完全再現」は原理的に不可能
+
+「GUIから設定値を抽出してJSON化し、それを注入する」という本プロジェクトの構想に対する**明確な限界**が2つ、仕様上確定した。
+
+#### (1) `credentials.` プレフィックス付きオプションは復号できない
+
+- キーに `credentials.` を付けると値は**暗号化して保存**される
+- 所有マイクロサービス以外が GET すると、値は固定文字列 **`"<<Encrypted>>"`** で返る
+  ```json
+  { "category": "microservice2", "key": "credentials.secret", "value": "<<Encrypted>>" }
+  ```
+- 所有者判定はマイクロサービスマニフェストの `settingsCategory` → コンテキストパス → マイクロサービス名 の優先順。復号は**オーナーのシステムユーザー（サービスユーザー／ブートストラップユーザー）に対してのみ**行われる
+- `GET /tenant/system/options` も同様に難読化される
+
+**含意**: SSOのクライアントシークレット、SMTPパスワード、コネクティビティ資格情報などの**秘匿値はエクスポートで採取できない**。設定定義ファイルには「キーの存在」だけを持たせ、**実値は別管理（Vault／CI/CDのSecret）とし、投入スクリプトが注入時に埋める**設計が必須。✅ 2-1
+
+#### (2) management テナントが `editable=false` にしたオプションは403で上書きできない
+
+- `Any option of any tenant can be defined as "non-editable" by the "management" tenant; once done, any PUT or DELETE requests made on that option by the tenant owner will result in a 403 error.`
+- 設定は `PUT /tenant/options/{category}/{key}/editable?targetTenant={targetTenant}`（`ROLE_OPTION_MANAGEMENT_ADMIN` かつ management テナントであること）
+- リテンションルールにも同様の `editable` フラグがあり「Management テナントのみが更新可能」と定義されている
+
+**含意**: 投入スクリプトは403を「異常終了」ではなく「意図的にロックされた項目」として扱えるようにし、**どの項目がロック済みかを可視化する**必要がある。
+
+#### (3) テナントポリシーのオプションは暗号化されない
+
+- `Tenant options specified in a tenant policy are **not encrypted**.` かつ `You should not specify or overwrite tenant options here with a 'credentials.' prefix, since the platform expects those options to be encrypted with data that will appear after the tenant has been created.`
+- これは推奨ではなく**仕様書自身の明示的な禁止事項**。第4版 §5「方式B」の注記の根拠が確定した ✅ 3-0
+- 併せて確定: テナントポリシーは**作成時コピー**方式（`The options and rules are copied into the tenant. Editing the policy has no effect on tenants that have already been created.`）。**ポリシーを後から編集しても既存テナントには反映されない** ✅ 3-0
+- なお、**テナントポリシーそのものを操作するREST エンドポイント（`/tenant/policies` 等）は Core 仕様にも公式ドキュメントにも存在が確認できなかった** → §7-2 は「GUI専用機能である可能性が高い」に更新
+
+---
+
+### 10.6 【§7-5 解消】EPL アプリ（Apama）の REST API — `/service/cep/eplfiles`
+
+第4版 §4.4 で「EPLアプリはUIからのインポートのみ」としていたが、**完全なCRUD REST APIが存在する**。
+
+| メソッド | パス | 用途 |
+|---------|------|------|
+| GET | `/service/cep/eplfiles` | 全EPLアプリの一覧 |
+| GET | `/service/cep/eplfiles?contents=true` | **EPLソース本文を含めて取得＝設定ダンプの起点** |
+| POST | `/service/cep/eplfiles` | 新規デプロイ |
+| PUT | `/service/cep/eplfiles/{id}` | 更新（`{"state":"inactive"}` だけ送って無効化も可） |
+| DELETE | `/service/cep/eplfiles/{id}` | 削除 |
+
+**投入JSONスキーマ**（4フィールド）:
+```json
+{
+  "name": "MyRule",
+  "description": "",
+  "state": "active",          // active | inactive
+  "contents": "<*.monファイルの中身をそのまま文字列で>"
+}
+```
+レスポンスには加えて `eplPackageName` / `errors` / `warnings` が含まれる。アクティベート時に `*.mon` へ一意のパッケージ名が割り当てられる。
+
+- **公式CLI**: `eplapp.py`（`Cumulocity-IoT/apama-eplapps-tools`、Apache 2.0・as-is無保証・Python 3.7+）が `list` / `deploy` / `delete` / `update` を提供。`-r` で既存アプリの上書き再デプロイ、`-i` で非アクティブ状態デプロイ。認証は `--cumulocity_url` / `--username` / `--password`
+- **CI/CD対応が公式に明記**: `As well as running tests locally during development, you can script deployment and testing of your EPL apps for CI/CD purposes.`（環境変数 `CUMULOCITY_SERVER_URL` / `CUMULOCITY_USERNAME` / `CUMULOCITY_PASSWORD`）
+- **権限設計上の注意**: EPL Appsページの利用には CEP Manager ロールが必要で、公式ドキュメントが `A user who has ADMIN permission for 'CEP management' is able to create and activate EPL apps and thus also has almost full control over the current tenant.` と警告している。**自動投入用サービスアカウントにこの権限を与えることは事実上テナント全権の付与に等しい**
+
+出典: `https://cumulocity.com/docs/streaming-analytics/epl-apps/`、`https://github.com/Cumulocity-IoT/apama-eplapps-tools`
+
+---
+
+### 10.7 【§7-5 部分解消】スマートルールの実体 — `c8y_SmartRule` マネージドオブジェクト
+
+専用RESTエンドポイントの公式ドキュメントは**依然として発見できない**（Cockpit のドキュメントはGUI手順のみで、エンドポイント・マネージドオブジェクト型・JSONペイロード・エクスポート/インポート・CLIのいずれにも言及なし）。ただし **Java SDK の `SmartRuleRepresentation`（`c8y.SmartRuleRepresentation` フラグメントを表す）から構造が判明**した:
+
+| フィールド | 型 | 意味 |
+|-----------|-----|------|
+| `ruleTemplateName` | String | スマートルールテンプレート名（シナリオ名） |
+| `name` | String | ルール名 |
+| `type` | String | 型 |
+| `config` | Map<String,Object> | テンプレートごとのパラメータ（閾値、宛先メールアドレス等） |
+| `enabledSources` | List<String> | 適用対象アセットのID群 |
+| `disabledSources` | List<String> | 除外アセットのID群 |
+| `enabled` | Boolean | 有効／無効 |
+| `cepModuleId` | GId | Esperモジュール managed object ID または Apama シナリオインスタンスID |
+| `id` | GId | スマートルール cep module の managed object ID |
+| `body` | String | Esperモジュールのパース済みボディ |
+
+**設計含意**: スマートルールは Inventory 上のマネージドオブジェクトであるため、`GET /inventory/managedObjects?fragmentType=c8y_SmartRule` でのダンプと、Inventory API での再作成が**原理的には**可能。ただし `cepModuleId` / `id` は環境固有のIDであり、テナント間移送時は再マッピングが必要。また `enabledSources` もデバイスIDを含むため、コンテンツ注入順序（デバイス→スマートルール）に依存する。**この経路は公式にドキュメント化されていないため、実機検証が必須**。
+
+**前提条件（テナント側の事前設定）**: テナントが **Smartrule マイクロサービスと Apama-ctrl マイクロサービスの両方にサブスクライブ**されていること。
+
+**権限**: グローバルスマートルールの閲覧は「Global smart rules」または「CEP management」のREAD＋「Inventory」のREAD、作成/編集/削除はADMIN。ローカルスマートルールはインベントリ権限（またはインベントリロール）のみで制御され、専用権限は不要。
+
+**組み込みテンプレート（11種）**: On alarm send SMS / On alarm send email / On alarm escalate it / On alarm duration increase severity / On geofence create alarm / On geofence send email / Calculate energy consumption / On missing measurements create alarm / On alarm execute operation / On measurement threshold create alarm / On measurement explicit threshold create alarm。メッセージ内の変数は `#{id}` `#{type}` `#{source}` `#{time}` `#{text}`、アラーム系は `#{status}` `#{severity}` `#{count}`、計測値系は `#{valueFragment}` `#{valueSeries}` `#{value}` `#{unit}`、ネストは `#{X.Y}` / `#{X.Y.Z}`。
+
+> **「Smart rules (NEW)」プラグインは別物**: Analytics Builder のモデルインスタンスをデバイス／グループ文脈から作成・管理する新方式で、実体は **Analytics Builder のモデル＋インスタンス**。権限はグローバルロール配下の「Smart rule instances」（READ / ADMIN）。前提はStreaming Analyticsマイクロサービスのサブスクリプション＋対象アプリへのプラグイン導入。**従来のスマートルールとは投入経路が異なるため、どちらを標準採用するか設計判断が必要。**
+
+出典: `https://cumulocity.com/docs/cockpit/smart-rules/`、`https://cumulocity.com/docs/cockpit/smart-rules-collection/`、`https://cumulocity.com/docs/streaming-analytics/smart-rules-plugin/`、`http://resources.cumulocity.com/documentation/javasdk/1007.5.0/com/cumulocity/rest/representation/cep/SmartRuleRepresentation.html`
+
+---
+
+### 10.8 【§7 追加解消】Analytics Builder / Streaming Analytics の自動投入 — `c8y-analytics` 拡張
+
+Analytics Builder の公式REST APIドキュメントは存在しない（コミュニティフォーラムでも「Dev toolsでUIの通信を見るしかない」との回答）が、**Cumulocity-IoT 公式GitHub org が go-c8y-cli 拡張 `c8y-analytics` を公開しており、これが実質的な自動投入経路**となる。
+
+導入: `c8y extension install Cumulocity-IoT/c8y-analytics`
+
+| 対象 | コマンド例 |
+|------|-----------|
+| ABモデル一覧 | `c8y analytics ab list` |
+| ABモデルのJSONダンプ | `c8y analytics ab get --id 5379731810 --outputFileRaw iir.json` |
+| ABモデルの投入 | `c8y analytics ab create --name iir2 --template iir.json` |
+| ABモデルの状態変更 | `c8y analytics ab update --id 1579830237 --state ACTIVE` |
+| ABモデル削除 | `c8y analytics ab delete --id 1579830237` |
+| EPLアプリ一覧 | `c8y analytics epl list --includeAll` |
+| テンプレートモデルのインスタンス | `c8y analytics instances list --id 2579780855` / `update` / `delete` |
+| Apamaマイクロサービス管理 | `c8y analytics management restart` / `diagnosticsEnhanced` |
+| Streaming Analyticsのテナントオプション | `c8y analytics configuration update --key analytics.builder/timedelay_secs --value 180` |
+| AB拡張（ブロック）の入出力 | `c8y analytics extensions {list\|get\|delete\|download\|upload}`（例: `--outputFileRaw MyBlocks.zip` / `--file MyBlocks.zip --name MyBlocks`） |
+
+**モデルの `mode`（DRAFT / TEST / SIMULATION / PRODUCTION）と `state`（ACTIVE / INACTIVE）もCLIから制御できる** — 第4版 §4.4 の「インポート後は常に非アクティブ → 別途アクティベーションが必要」という制約が、CLIで自動化可能になる。
+
+**AB拡張（ブロック）の注意**: アップロードした拡張は即時反映されず、**Streaming Analytics エンジンの再起動（"Restart to deploy extension" ボタン／`c8y analytics management restart`）が必要**。自動投入手順にこのステップを組み込むこと。
+
+**Apama-ctrl マイクロサービスの必要ロール**（サービスユーザー権限設計の参考）: `ROLE_APPLICATION_MANAGEMENT_READ, ROLE_INVENTORY_READ/ADMIN/CREATE, ROLE_MEASUREMENT_READ/ADMIN, ROLE_EVENT_READ/ADMIN, ROLE_ALARM_READ/ADMIN, ROLE_DEVICE_CONTROL_READ/ADMIN, ROLE_IDENTITY_READ/ADMIN, ROLE_CEP_MANAGEMENT_READ/ADMIN, ROLE_OPTION_MANAGEMENT_READ, ROLE_SMS_ADMIN, ROLE_AUDIT_READ/ADMIN, ROLE_USER_MANAGEMENT_READ, ROLE_USER_MANAGEMENT_OWN_READ, ROLE_TENANT_MANAGEMENT_READ, ROLE_BULK_OPERATION_READ/ADMIN, ROLE_NOTIFICATION_2_ADMIN`
+
+出典: `https://github.com/Cumulocity-IoT/c8y-analytics`、`https://cumulocity.com/docs/streaming-analytics/analytics-customization/`、`https://cumulocity.com/docs/streaming-analytics/analytics-builder/`
+
+---
+
+### 10.9 【§7-4 解消】go-c8y-cli のカバレッジ確定
+
+`api/spec/yaml/` の全65ファイルを GitHub Contents API で列挙（master、2026-08-05時点）。**コマンドはこのYAML仕様から自動生成**される（`api/spec/yaml/` に仕様を足して `task build` すれば未対応エンドポイント向けコマンドを自作できる）。
+
+**カバーされている（生成済みサブコマンドあり）**:
+`tenantOptions` `systemOptions` `currentTenant` `tenants` `tenantApplications` `tenantsTFA` `tenantStatistics` `userRoles` `userGroups` `users` `userReferences` `currentUser` `retentionRules` `notification2` `notification2Subscriptions` `notification2Tokens` `microservices` `microservicesLoglevels` `applications` `applicationVersions` `currentApplication` `identity` `features` `featuresByTenant` `certificateAuthority` `devicecertificates` `deviceCredentials` `deviceProfile` `remoteAccessConfigurations` `databroker` `datahub*` `uiPlugins` `smartgroups` `inventory` 系 ほか
+
+**カバーされていない（＝汎用 `c8y api` か別手段で補う必要がある）**:
+- **`loginOptions`（SSO/OAuth2）** — 専用仕様ファイルなし。`tenants.yaml`（`getTenantCollection` / `newTenant` / `getTenant` / `deleteTenant` / `updateTenant` / `enableApplicationOnTenant` / `disableApplicationFromTenant` / `getApplicationReferenceCollection` のみ）にも `currentTenant.yaml`（`currentTenant` / `listApplications` / `getTenantVersion` のみ）にも `/tenant/loginOptions` の参照はない
+- **`smartRules`** — アルファベット順で `smartgroups.yaml` の直後が `software.yaml`。`smartrules` 相当が欠落
+- **EPL / Apama / Analytics Builder** — `c8y-analytics` **拡張**で補う（§10.8）
+
+✅ 3-0
+
+**IaC運用に使える主要フラグ（グローバル）**:
+
+| フラグ | 用途 |
+|-------|------|
+| `--outputFile` | select/view 適用後のJSONをファイル保存＝**設定ダンプ** |
+| `--outputFileRaw` | 生レスポンスを保存 |
+| `--includeAll` | ページングを自動反復して全件取得（**pageSize を自動的に最大値2000にするため `--pageSize` の明示は不要**） |
+| `-d, --data` | JSON または shorthand JSON（`--data 'value1=1,my.nested.value=100'`）。**`@file.json` のファイル指定は不可** |
+| `--template` / `--templateVars` | jsonnet テンプレートによるボディ生成。**ファイルでJSONを保持するのはこちらの役割** |
+| `--dry` / `--dryFormat` | 送信せずドライラン。`json` / `dump` / `markdown`（既定） / **`curl`** — **等価なcurlコマンドを抽出できるため、CLI非依存の投入スクリプトへの変換にも使える** |
+| `-o/--output` `--select` `--flatten` | table/json/csv/csvheader 出力、プロパティ抽出、ネストJSONのドット記法平坦化 |
+| `--silentStatusCodes 409` | 重複エラーを黙殺し、実質的に冪等な再実行を実現（第4版 §4.1 で既出） |
+
+**パイプライン一括投入**: `c8y tenantoptions create --category … --key …` の `--key` は `accepts pipeline` のため、Plain text / JSON Lines / CSV を標準入力から流し込める。テンプレート内で `input.value` を参照すると行ごとに異なる key/value を投入できる（各行が個別にテンプレート処理される）。
+※ `c8y tenantoptions update` は category が URLパスパラメータのため、**1回のパイプ実行は実質1カテゴリに限定**される。
+
+**認証（CI/CD での重要事項）**: v2.53.0（2026-01-29）で Device Flow、**v2.54.0（2026-03-18）で Authorization Code（ブラウザ）フローと Device Certificate(x509) ログイン**に対応。`c8y sessions create --loginType BROWSER` / `--loginType DEVICE`。
+- 前提: テナント側SSO設定で「Redirect to the user interface application」が有効／IdP側で `http://localhost:5001/callback`（`--browserCallback` で変更可）が許可されていること
+- **Authorization Code / Device Flow はいずれも初回ログインが対話的**。**完全無人のCI/CDには Device Certificate(x509) か、非SSOのサービスユーザーが必要** ✅ 2-1
+
+**位置づけの注意**: 元来 Reuben Miller 個人プロジェクト（MIT、"Unofficial Cumulocity IoT Command Line Tool"）で、現在は Cumulocity GitHub org 配下にあるが**Cumulocity製品ラインの正式提供物ではない**。またプラットフォーム仕様との乖離が実在する（例: `c8y retentionrules create` の `dataType` 許容値は `ALARM/AUDIT/EVENT/MEASUREMENT/OPERATION/*` で **`BULK_OPERATION` が欠落**。プラットフォーム側の Core 仕様には存在する）。**CLIのフラグ検証を仕様の正としてはいけない。**
+
+出典: `https://api.github.com/repos/reubenmiller/go-c8y-cli/contents/api/spec/yaml`、`https://goc8ycli.netlify.app/docs/cli/c8y/c8y/`、`https://goc8ycli.netlify.app/docs/cli/c8y/tenantoptions/…`、`https://goc8ycli.netlify.app/docs/concepts/paging/`、`https://api.github.com/repos/reubenmiller/go-c8y-cli/releases/tags/v2.54.0`
+
+---
+
+### 10.10 `loginOptions` の `authConfig` 完全スキーマ（SSO設定のJSON化）
+
+`POST /tenant/loginOptions`
+- Content-Type: **`application/vnd.com.nsn.cumulocity.authconfig+json`**
+- 必要ロール: `ROLE_TENANT_ADMIN` **または** `ROLE_TENANT_MANAGEMENT_ADMIN`
+- required: `type`, `providerName`
+
+| フィールド | 内容 |
+|-----------|------|
+| `type` | `BASIC` / `OAUTH2` / `OAUTH2_INTERNAL`（大文字小文字非依存） |
+| `providerName` | プロバイダ表示名 |
+| `userManagementSource` | `INTERNAL` / `REMOTE` |
+| `grantType` | `AUTHORIZATION_CODE` / `PASSWORD` |
+| `sessionConfiguration` | `absoluteTimeoutMillis` / `maximumNumberOfParallelSessions` / `renewalTimeoutMillis` / `userAgentValidationRequired` |
+| `authorizationRequest` / `tokenRequest` / `refreshRequest` / `logoutRequest` | 各リクエストのURL・メソッド・ヘッダ・ボディテンプレート |
+| `signatureVerificationConfig` | `aad` / `adfsManifest` / `jwks` / `manual` の4方式 |
+| `userIdConfig` / `accessTokenToUserDataMapping` | トークンクレーム→ユーザー属性のマッピング |
+| `onNewUser.dynamicMapping` | 新規ユーザーへのグループ／アプリ／インベントリロールの動的マッピング |
+| `externalTokenConfig` | 外部トークン検証。`validationMethod`: `INTROSPECTION` / `USERINFO` |
+| `authenticationRestrictions` | 認証制限 |
+| `onlyManagementTenantAccess` | managementテナントのみアクセス許可 |
+
+付随エンドポイント: `/tenant/loginOptions/{typeOrId}`（GET/PUT/DELETE）、`…/accessMappings`（+`/{id}`）、`…/inventoryAccessMappings`（+`/{id}`）、`…/restrict`（PUT）。**トップレベルの loginOptions 系パスはちょうど7本**。
+
+- **SAMLは非対応**。CumulocityのSSOは **OAuth2 の authorization code grant のみ**をサポートする。SSO設定の自動投入では SAML2 の loginOption 定義は考慮不要
+- GUI上の場所: Administration > **Settings > Authentication > Single sign-on タブ**（SSOアクセス権を持つテナントにのみ表示）
+- **エクスポート**: `GET /tenant/loginOptions/OAUTH2` で現行設定を読み出し、別テナントへ `POST` で投入する運用が成立する（ただしクライアントシークレット等は §10.5(1) の制約を受ける）
+- **公式のプロビジョニング実装例**: `Cumulocity-IoT/cumulocity-provision-sso`（Java製マイクロサービス）が親テナントのSSO設定を子テナントへ複製する。**マイクロサービスのサブスクライブをトリガー**に、親の現行SSO設定がサブテナントへ書き込まれる。既知の制約として**アンサブスクライブ時の設定削除と、親側変更時の自動再配布は未実装**
+
+✅ 3-0
+
+---
+
+### 10.11 追加で判明したテナントオプションの category/key（§7-9 の一部を埋める）
+
+| category | key | 内容 |
+|----------|-----|------|
+| `measurement.series.latestvalue` | `<fragment>.<series>` 形式（例 `c8y_Humidity.H`、`c8y_Temperature.*`、全有効化は `*`） | 最新計測値機能。**GUIに設定UIがなく、`PUT /tenant/options/measurement.series.latestvalue` でのみ設定**。値は空文字列（将来予約）。プロパティ名に空白および `$ & + , / : ; = ? @ " < > # % { } \| \ ^ ~ [ ] \`` を含めてはならない。**ワイルドカード `*` が機能するのは Release 2026 以降**（同リリースで `c8y_LatestMeasurements` フラグメントによる自動永続化がpreview→GA） ✅ 3-0 |
+| `access.control` | `allow.origin` | CORS許可オリジン。既定 `*`。定義済みキー限定 |
+| `alarm.type.mapping` | `<ALARM_TYPE>` | `severity\|text` 形式で上書き（例 key=`temp_too_high`, value=`CRITICAL\|temperature too high`）。新規キー作成可 |
+| `password` | `enforce.strength` | パスワード強度の強制 |
+| `configuration` | `default.tenant.applications` / `default.tenant.microservices` / `on-update.tenant.*` | テナント作成／更新時のデフォルトサブスクリプション。**サブテナント個別にはテナントポリシー経由の追加オプションで上書き可** ✅ 3-0 |
+| `configuration` | `measurement.series.previousvalue.enabled` | 計測値の前値保持 |
+| `streaminganalytics` | `client.numClients` | Apama接続の並列数。既定は複数接続、`"1"` で完全直列 |
+| `streaminganalytics` | `applicationAccess` | `"role"` を設定すると特定権限を持つユーザーにのみ表示 |
+| `analytics.builder`（`c8y analytics configuration` 経由） | `timedelay_secs` | ABの遅延許容秒数（例 180） |
+| マイクロサービス個別（既定は contextPath、`settingsCategory` で上書き可） | `email.protocol` / `email.connection.encrypted` ほか | メールサーバ設定。SMTP(暗号化なし)=`smtp`+`false` / SMTP(STARTTLS)=`smtp`+`true` / SMTPS(SSL/TLS)=`smtps`+`true` |
+| — | `assets.permission.mode` | 2026-04-14にAPIドキュメントが改善された旨のアナウンスあり（要現物確認） |
+
+> **依然として、テナントオプション／システムオプションの網羅カタログは公式に存在しない。** 実テナントで `GET /tenant/options` と `GET /tenant/system/options` を叩いて現物採取するのが唯一確実な方法（→ §7-9 は未解消のまま）。
+
+---
+
+### 10.12 Enterprise Configuration（メール・テンプレート）で設定できる項目
+
+Administration > Configuration タブ（必要権限: 参照=Options management の READ / 変更=同 ADMIN）:
+
+- **メールテンプレート**: 二要素認証SMSテンプレート、パスワードリセットメール（既知アドレス／未知アドレスの2種）、パスワード変更確認、招待メール、データエクスポートの件名・本文、テナント停止通知、ストレージ上限の事前警告／削除後通知
+- **プレースホルダ**: `{host}` / `{tenant-domain}` / `{token}` / `{email}` / `{username}` / `{binaryId}` / `{exportApi}` / `{size}`
+- **メールサーバ**: プロトコル/暗号化（SMTP / SMTP+STARTTLS / SMTPS）、ホスト、ポート、ユーザー名、パスワード、送信元アドレス。**空パスワード構成もサポート**
+- **サポートリンク**: 「Request support」の設定。`false` で無効化可能
+
+ドメイン名管理（`sslmanagement` マイクロサービスのサブスクリプションが前提。必要権限: Inventory / Options management / Application management の READ+ADMIN）:
+- SSL証明書は有効期限内のX509形式・**確立された認証局発行（自己署名不可）**・**ワイルドカード形式**（例 `*.iot.mycompany.com`）。PKCS#12でチェーンと秘密鍵を結合。DNSはワイルドカードCNAMEを推奨。証明書更新時はCommon Nameが同一である必要がある
+
+ブランディング（`feature-branding` アプリのサブスクリプションが前提。必要権限: Application management の READ+ADMIN）:
+- Generic（タイトル / ファビコンICO / ダークテーマ切替 / フォントスタック / Cookieバナー）、Light・Darkテーマ別のロゴ・ブランドカラー・ステータスカラー・汎用カラー・アクションバー・メインヘッダ・ナビゲータ・右ドロワー、Custom CSS、**Advanced branding タブでのJSON直接編集（Web SDK の ApplicationOptions）**
+
+出典: `https://cumulocity.com/docs/enterprise-tenant/customization/`
+
+---
+
+### 10.13 §7 未解決事項の更新（第5版時点）
+
+| # | 項目 | 第5版での状態 |
+|---|------|--------------|
+| 1 | Settingsメニュー各項目↔テナントオプションの対応表 | **未解消**。ただしGUIカテゴリ（Application / Properties library / SMS provider / Connectivity / Localization / Feature toggles）は現行版ドキュメントで再確認済み（§10.12・付録A）。対応表は実機のネットワーク観察が必要 |
+| 2 | テナントポリシーのREST API | **ほぼ解消（否定的結論）**。Core仕様にも公式Docsにも `/tenant/policies` 等のエンドポイントは存在しない → **GUI専用機能とみなし、ポリシー定義そのもののGit管理は断念して方式Aに寄せるのが妥当** |
+| 3 | ブランディングパッケージの形式・手順 | 未解消 |
+| 4 | go-c8y-cli の実用評価 | **解消**（§10.9）。カバレッジ・フラグ・認証・限界まで確定 |
+| 5 | スマートルールのREST作成可否 | **部分解消**（§10.7）。マネージドオブジェクト構造は判明、公式RESTエンドポイントは非公開のまま。**EPLアプリ側は完全解消**（§10.6） |
+| 6 | `c8y_Dashboard` の構造検証 | 未解消（実機確認事項） |
+| 7 | Edge上でのTenant API挙動 | 未解消（実機確認事項）。ただしVM版EdgeのアプライアンスAPIは完全確定（§10.2） |
+| 8 | Migration Toolの現状 | 未解消（採用非推奨の結論は不変） |
+| 9 | テナントオプション/システムオプションの既定値カタログ | **未解消**（§10.11 で一部のkeyを追加。網羅カタログは公式に存在しない） |
+| 10 | SSOプロバイダテンプレートの現行一覧 | 未解消。ただし**SAML非対応・OAuth2 authorization code grantのみ**は確定（§10.10） |
+| 11 | OAI-Secureのトークン有効期間系オプション | **部分解消**。`sessionConfiguration`（`absoluteTimeoutMillis` / `renewalTimeoutMillis` / `maximumNumberOfParallelSessions` / `userAgentValidationRequired`）が authConfig 内に存在（§10.10）。パスワードポリシーは `password` / `enforce.strength` を確認 |
+| 12 | Notifications 2.0 等 | **部分解消**。`/notification2/subscriptions`（+`/{id}`）、`/notification2/token`、`/notification2/unsubscribe`、`/notification/realtime` が Core 仕様に存在し、go-c8y-cli にも `notification2*.yaml` 3種のコマンド群がある（§10.3・§10.9） |
+| **新** 13 | **K8sネイティブ世代Edgeにおける `/edge/...` API の継承有無** | 未確認。10.18.0 仕様はVM世代のもの。**導入対象世代での実機確認が必須** |
+| **新** 14 | **Analytics Builder モデルの managed object フラグメント型** | 未確認。`c8y-analytics` CLI 経由なら不要だが、Inventory API 直叩きをするなら要特定 |
+| **新** 15 | **Terraform provider / Ansible collection の有無** | **調査した限り公式・非公式とも存在しない**。Postman collection はコミュニティ製（`AdeelChohan/Cumulocity-Postman-V2-Collection`）で、公式は OpenAPI 仕様への移行を理由に v1 collection の保守を終了している。**IaC基盤は go-c8y-cli + jsonnet テンプレート、または OpenAPI からのクライアント生成で自作するのが現実解** |
+
+---
+
+### 10.14 第5版で訂正した第4版までの記述
+
+| 箇所 | 第4版までの記述 | 第5版の訂正 |
+|------|---------------|-----------|
+| §3.7 | 旧VM版Edge向けに `/edge/configuration/{…}` が「ある」という概略のみ | **全18エンドポイント・全リクエストスキーマ・認証・非同期タスク（409排他）・アップロード規則まで確定**（§10.2）。過去の deep-research で0-3/1-2により棄却されたEdge関連主張は、**Redoc SPA 問題による誤った棄却**だった |
+| §4.4 | EPLアプリは「Streaming Analyticsアプリでインポート・アクティベート」＝UI経路のみ | **`/service/cep/eplfiles` の完全なCRUD REST APIが存在**（§10.6）。`?contents=true` でソース込みダンプ可 |
+| §4.4 | ABモデルは「デプロイはモデルマネージャUIのみ文書化」 | **`c8y-analytics` 拡張により list/get/create/update(state)/delete と mode 制御までCLI自動化可能**（§10.8） |
+| §4.3 | スマートルールは「最も情報が薄い領域」 | マネージドオブジェクト構造（`c8y_SmartRule` / `SmartRuleRepresentation`）と組み込みテンプレート11種が判明（§10.7） |
+| §2.2 / §5 | `credentials.` オプションはテナントポリシーに含めない | 加えて **`GET` でも `"<<Encrypted>>"` しか返らずエクスポート不能**であることが確定（§10.5）。**「GUIから設定値を抽出してJSON化」の構想には原理的な穴がある**ため、秘匿値は別管理前提で設計すること |
+| §7-2 | テナントポリシーのREST APIの有無は「未確認」 | **存在が確認できない＝GUI専用機能とみなすのが妥当**（§10.13） |
 
 ---
 

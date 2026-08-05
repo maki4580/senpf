@@ -1,6 +1,8 @@
 # Cumulocity 設定項目一覧
 
-作成日: 2026-08-04 ／ 詳細な背景・注入アーキテクチャ・制約は [cumulocity-config-definition.md](cumulocity-config-definition.md) を参照
+作成日: 2026-08-04 ／ **最終更新: 2026-08-05（第5版対応）** ／ 詳細な背景・注入アーキテクチャ・制約は [cumulocity-config-definition.md](cumulocity-config-definition.md) を参照
+
+> **2026-08-05 の追加分**: §1.4 Edge専用REST API（全18エンドポイント）／ §3.4 EPLアプリ（`/service/cep/eplfiles`）／ §3.5 スマートルール（`c8y_SmartRule` 構造）／ §3.3 に `c8y-analytics` によるAnalytics Builder自動化を追記。根拠は [cumulocity-config-definition.md §10](cumulocity-config-definition.md#10-第5版追補--openapi-一次仕様ファイルの直読により確定した事項2026-08-05)。
 
 ## 本書の読み方
 
@@ -66,6 +68,13 @@
 | 22 | Analytics Builder モデル | モデル単位 | UI | **○** | **○** | 共通 |
 | 23 | アプリケーション / マイクロサービス | アプリ単位 | ZIP / REST / CLI | ○ | ○ | 共通（Edgeは要オプトイン） |
 | 24 | デバイス可用性・監視 | デバイス単位 | UI / REST | △ | △ | 共通 |
+| **25** | **Edge専用REST API（VM世代）**🔷 | Edgeアプライアンス | **REST（`/edge/...`）** | △ | **○** | Edge（VM世代）のみ |
+| **26** | **EPLアプリ（Apama）**🔷 | EPLアプリ単位 | **REST（`/service/cep/eplfiles`）/ `eplapp.py`** | **○** | **○** | 共通 |
+| **27** | **スマートルール**🔷 | ルール単位 | UI（公式）／ Inventory API（非公式・要検証） | △ | △ | 共通（要smartrule+apama-ctrl） |
+
+### 検証状態の凡例（追加）
+
+🔷 = **2026-08-05に一次仕様ファイル（OpenAPI生YAML/JSON）または公式リポジトリを直接取得して確定した項目**
 
 ---
 
@@ -117,6 +126,50 @@
 | 監視エンドポイント | Prometheus互換メトリクス | 固定提供 | `https://<domain>:3443/metrics`。収集間隔: ディスク10分/メモリ5秒/CPU・I/O・NWは5・60・600秒 | — | — | 監視系の接続先 |
 | バックアップ対象 | 保全すべきディレクトリ | 運用手順 | `/var/lib/rancher/k3s`（常に必須）、`/datahub`（DataHub導入時） | — | — | 復旧可否に直結 |
 | ベースラインサイジング | 必要リソース | 前提条件 | 2025: 6コア/10GB/100GB、2026: 8コア/16GB/150GB。x86-64 AVX必須、Helm 3.x、ポート80/443予約 | — | — | 不足時はインストール不可 |
+
+### 1.4 Edge 専用 REST API（VMアプライアンス世代 / Release 10.18.0）🔷
+
+> **世代の注意**: この `/edge/...` API は **VMアプライアンス世代（Release 10.18.0）** の仕様である。K8sネイティブ世代（2025/2026）では §1.1〜1.3 の Edge CR / c8yedge CLI が主たる注入層であり、**このAPIが継承されているかは未確認**。導入対象の世代で実機確認すること。
+
+**共通事項** — サーバURL: `https://<MY_OWN_DOMAIN>`（インストール前は自己署名証明書がIPアドレス向けのため `https://<IP>/...` を使う）／ 認証: Managementテナントの **Basic認証**（ユーザー名に `management/` を前置。`Basic <Base64(management/admin:password)>`）／ **POSTはすべて非同期タスク**（レスポンスのタスクIDを `GET /edge/tasks/{id}` でポーリング）／ **タスクの同時実行は不可（実行中に別タスクを投げると HTTP 409）＝投入スクリプトは逐次実行＋完了待ちが必須**。
+
+| 設定項目 | 概要 | 設定方法（エンドポイント） | 既定値・許容値 | Export | Import | 変更時の影響 |
+|---------|------|------------------------|--------------|--------|--------|-------------|
+| 初期インストール 🔷 | admin/root/edge_admin・ドメイン・証明書方式を一括投入 | `POST /edge/install`（**認証不要**）→ 続けてライセンス・証明書をアップロード | `{admin{username,password}, root_password, edge_admin{username,password,email}, domain_name, certificate: generate\|upload}` | ✗ | ○ | **POSTだけではインストールは始まらない**（ファイルアップロードで開始）。成功後は本エンドポイントが利用不可になる（失敗時は残るので再試行可） |
+| 直近インストール情報 🔷 | 最後のインストールの状態 | `GET /edge/tasks/latest-installation`（**認証不要**） | — | △ | — | 参照のみ |
+| ネットワーク 🔷 | IP/マスク/GW/DNS/内部レンジ | `GET`/`POST /edge/configuration/network`（インストール前は認証不要） | `{address, netmask, gateway, dns, ip_range}`。**`10.244.0.0` と `10.96.0.0` はEdge内部予約で使用不可** | △ | ○ | 到達性が変わる。誤設定でアプライアンスに接続不能になりうる |
+| ドメイン名 🔷 | EdgeのFQDN | `GET`/`POST /edge/configuration/domain`（**認証不要**。GETはインストール成功後のみ） | `{domain_name, certificate: generate\|upload}` | △ | ○ | 変更中にRESTエンドポイントの提示証明書が旧→新ドメイン用に切り替わる。**旧ドメインへのHTTPSポーリングは途中で失敗する** |
+| ホスト名 🔷 | アプライアンスのホスト名 | `GET`/`POST /edge/configuration/hostname` | `{hostname}` | △ | ○ | OSレベルのホスト名 |
+| 時刻同期（NTP）🔷 | NTP有効化・同期間隔・サーバ | `GET`/`POST /edge/configuration/time-sync` | `{enabled, interval_power_of_two, servers[]}` | △ | ○ | 時刻ずれはデータのタイムスタンプ・証明書検証に影響 |
+| マイクロサービスホスティング 🔷 | 機能の有効／無効 | `GET`/`POST /edge/configuration/microservices` | `{enabled: bool}`。**"Tenant Manager" ロールが必須** | △ | ○ | **実行中アプライアンスが一時停止する**。VM版は所要10〜15分・4論理CPU/8GB RAM以上が前提 |
+| リモートデバイス管理 🔷 | クラウドからのリモート接続 | `GET`/`POST /edge/configuration/remote-connectivity` | `{enabled, remote_tenant_url}` | △ | ○ | クラウドテナントからの遠隔操作可否 |
+| SSL証明書 🔷 | 証明書の有効性確認・更新 | `GET`/`POST /edge/configuration/certificate` | `{renewal_type: generate\|upload}`。uploadは後続のファイルアップロードが必要 | △ | ○ | ブラウザ／デバイスからのTLS接続に直結 |
+| OSセキュリティ: ログインバナー 🔷 | 表示文言 | `POST /edge/configuration/security` → `OS.login_banner` | 文字列 | △ | ○ | 表示のみ |
+| OSセキュリティ: セッション無操作タイムアウト 🔷 | 自動ログアウト秒数 | 同 `OS.login_sessions_inactivity_timeout_seconds` | 既定 **600秒** | △ | ○ | OSログインセッションの切断 |
+| OSセキュリティ: rsyslog転送 🔷 | 外部syslogへの転送 | 同 `OS.rsyslog{server,port,protocol}` | `protocol`: **TCP / UDP** | △ | ○ | ログ集約基盤との連携 |
+| OSセキュリティ: audisp転送 🔷 | 監査イベントの転送 | 同 `OS.audisp{server,port}` | — | △ | ○ | 監査基盤との連携 |
+| OSセキュリティ: SSH 🔷 | SSHアクセスの可否 | 同 `OS.ssh_enabled` | 既定 **true** | △ | ○ | **falseにするとSSHでの保守経路を失う** |
+| OSセキュリティ: SELinux 🔷 | SELinuxモード | 同 `OS.selinux_mode` | **permissive（既定） / enforcing** | △ | ○ | enforcingは想定外の動作制限を招きうる |
+| OSセキュリティ: 監査ログ 🔷 | OS監査ログの有効化 | 同 `OS.audit_logging_enabled` | 既定 **false** | △ | ○ | **⚠️ 不可逆。一度有効化すると無効化できない**（`Once enabled, you cannot disable the audit logging configuration.`） |
+| K8sセキュリティ: 監査ポリシー 🔷 | Kubernetes監査の記録レベル | 同 `kubernetes.audit_policy{level,max_size,max_backup,max_age}` | `level`: **None（既定） / Metadata / Request / RequestResponse** | △ | ○ | レベルを上げるとログ量・ディスク消費が大幅増 |
+| バージョン更新 🔷 | Edgeのアップデート | `POST /edge/update` + アーカイブのアップロード | `{type}` | — | ○ | **大容量ファイルはアップロードの10秒タイムアウトに注意**（後述） |
+| ディスク拡張 🔷 | インストール／データディスクの拡張 | `POST /edge/expand-disk` | 事前にハイパーバイザ側でディスクサイズを拡張しておく。回数制限なし | — | ○ | 縮小は不可 |
+| 再起動 🔷 | アプライアンス再起動 | `POST /edge/reboot` | — | — | — | ダウンタイム発生 |
+| 診断レポート 🔷 | 診断ファイルの作成・取得 | `POST /edge/diagnostics` → `GET /edge/diagnostics/{id}` | — | ○ | — | サポート問い合わせ用 |
+| バージョン参照 🔷 | 現在のEdgeバージョン | `GET /edge/version`（インストール成功後のみ） | — | △ | — | 参照のみ |
+| タスク進捗／ログ 🔷 | 非同期タスクの追跡 | `GET /edge/tasks/{id}` / `GET /edge/tasks/{id}/log` | — | △ | — | 投入スクリプトの完了判定に必須 |
+
+**ファイルアップロードの規則（ライセンス／証明書／更新アーカイブ共通）**
+
+| 項目 | 内容 |
+|------|------|
+| URL | **タスク作成レスポンスの `uploads` 配列から読み取る。自前で組み立ててはならない**（`The URL layout is not static and can change anytime.`） |
+| ヘッダ | `Content-Type: application/octet-stream` ／ `Content-Disposition: attachment; filename="<filename>"`（**ファイル名のみ・パス不可**） |
+| タイムアウト | **10秒**（タスク作成時、または最後にバイトを受信した時点から）。超過で HTTP 404 |
+| 大容量ファイル | HTTPクライアントが全体をメモリにロードしてから送る実装だとタイムアウトする。**ファイルから直接ストリームすること** |
+| 応答 | 201=成功 ／ 400=同一タスクで再アップロード or `Content-Disposition` 不正 ／ 404=タイムアウト |
+
+📌 出典: `https://cumulocity.com/api/edge/10.18.0/dist/c8y-edge-oas.json`（2026-08-05に生仕様を直接取得・全パス/全requestBodyを機械抽出）
 
 ---
 
@@ -447,9 +500,89 @@ UIパス: Streaming Analytics > Analytics Builder（モデルマネージャ） 
 | テンプレートパラメータ | 再利用のためのパラメータ | 名前（モデル内一意）/ 型 / 既定値 / 必須・任意 | インスタンス毎に値・モード・アクティベーションを独立設定可 |
 | ブロック単位パラメータ | 各ブロックの設定 | 入出力デバイス / fragment・series マッピング / 閾値 / 期間・タイミング / メジャーメント種別 / アラーム種別・重大度 | ロジックの挙動そのもの |
 | Simulation設定 | 履歴再生の範囲 | 開始・終了タイムスタンプ（カレンダー選択） | 検証対象期間 |
-| （関連）EPLアプリ ⚠️ | Apama `.mon` によるCEP | Streaming Analyticsでアクティベートするとデプロイ。既存 `.mon` のインポート可 | CEPロジックの追加 |
+| （関連）EPLアプリ ⚠️ | Apama `.mon` によるCEP | Streaming Analyticsでアクティベートするとデプロイ。既存 `.mon` のインポート可 → **詳細は §3.4** | CEPロジックの追加 |
 
-### 3.4 アプリケーション / マイクロサービス ⚠️
+**自動投入経路（🔷 第5版追記）**: 公式REST APIのドキュメントは存在しないが、Cumulocity-IoT 公式GitHub の go-c8y-cli 拡張 **`c8y-analytics`**（`c8y extension install Cumulocity-IoT/c8y-analytics`）で完全に自動化できる。
+
+| 操作 | コマンド |
+|------|---------|
+| 一覧 | `c8y analytics ab list` |
+| **JSONダンプ（Export）** | `c8y analytics ab get --id <ID> --outputFileRaw model.json` |
+| **投入（Import）** | `c8y analytics ab create --name <NAME> --template model.json` |
+| **アクティベーション** | `c8y analytics ab update --id <ID> --state ACTIVE` ← §3.3の「インポート直後は常にInactive」制約を自動化で解消 |
+| 削除 | `c8y analytics ab delete --id <ID>` |
+| テンプレートモデルのインスタンス | `c8y analytics instances {list\|update\|delete} --id <MODEL_ID> [--instanceId <ID>]` |
+| AB拡張（ブロック）の入出力 | `c8y analytics extensions {list\|get\|delete\|download\|upload}`（`--outputFileRaw MyBlocks.zip` / `--file MyBlocks.zip --name MyBlocks`） |
+| Apamaマイクロサービス | `c8y analytics management restart` / `diagnosticsEnhanced` |
+| Streaming Analyticsのテナントオプション | `c8y analytics configuration update --key analytics.builder/timedelay_secs --value 180` |
+
+> ⚠️ **AB拡張（ブロック）は即時反映されない** — アップロード後に Streaming Analytics エンジンの再起動（UIの "Restart to deploy extension" / `c8y analytics management restart`）が必要。自動投入手順にこのステップを組み込むこと。
+
+関連テナントオプション: `streaminganalytics` / `client.numClients`（Apama接続の並列数。既定は複数接続、`"1"` で完全直列）、`streaminganalytics` / `applicationAccess`（`"role"` で特定権限保持者のみに表示）。
+
+📌 出典: `https://github.com/Cumulocity-IoT/c8y-analytics`、`https://cumulocity.com/docs/streaming-analytics/analytics-customization/`
+
+### 3.4 EPLアプリ（Apama Streaming Analytics）🔷
+
+UIパス: Streaming Analytics > **EPL Apps** ／ 設定単位: EPLアプリ（`*.mon`）単位 ／ **Export: ○（`GET /service/cep/eplfiles?contents=true` でソース込みダンプ／UIからダウンロード）** ／ **Import: ○（REST POST／UIのImport EPL）**
+
+| 設定項目 | 概要 | 設定方法 | 既定値・許容値 | 変更時の影響 |
+|---------|------|---------|--------------|-------------|
+| `name` | EPLアプリ名 | `POST /service/cep/eplfiles` | 文字列 | アクティベート時に一意のパッケージ名が割り当てられる |
+| `description` | 説明 | 同上 | 任意 | 管理性のみ |
+| `state` | 配備状態 | 同上 / `PUT /service/cep/eplfiles/{id}` に `{"state":"inactive"}` だけ送っても可 | **`active` / `inactive`** | activeにすると即座にCEPロジックが稼働する |
+| `contents` | `*.mon` ファイルの中身 | 同上（文字列としてそのまま埋め込む） | Apama EPL ソース | ロジックそのもの。構文エラーはレスポンスの `errors` / `warnings` に返る |
+
+**REST API 一覧**
+
+| メソッド | パス | 用途 |
+|---------|------|------|
+| GET | `/service/cep/eplfiles` | 一覧 |
+| GET | `/service/cep/eplfiles?contents=true` | **ソース本文込みで取得＝設定ダンプの起点** |
+| POST | `/service/cep/eplfiles` | 新規デプロイ |
+| PUT | `/service/cep/eplfiles/{id}` | 更新 |
+| DELETE | `/service/cep/eplfiles/{id}` | 削除 |
+
+**公式CLI**: `eplapp.py`（`Cumulocity-IoT/apama-eplapps-tools`、Apache 2.0・as-is無保証・Python 3.7+）— `list` / `deploy` / `delete` / `update`。`-r` で既存アプリの上書き再デプロイ、`-i` で非アクティブ状態デプロイ。認証は `--cumulocity_url` / `--username` / `--password`。CI/CD向けに環境変数 `CUMULOCITY_SERVER_URL` / `CUMULOCITY_USERNAME` / `CUMULOCITY_PASSWORD` を使ったスクリプト化が公式に明記されている。
+
+> ⚠️ **権限設計の重大な注意**: EPL Apps の利用には CEP Manager ロールが必要で、公式ドキュメントが「`CEP management` に ADMIN 権限を持つユーザーはEPLアプリを作成・アクティベートでき、**そのため現テナントのほぼ全権を持つに等しい**」と警告している。**自動投入用サービスアカウントにこの権限を与えることは、事実上テナント全権の付与に等しい**。
+
+📌 出典: `https://cumulocity.com/docs/streaming-analytics/epl-apps/`、`https://github.com/Cumulocity-IoT/apama-eplapps-tools`
+
+### 3.5 スマートルール 🔷⚠️
+
+UIパス: Cockpit（グローバル／ローカル） ／ 設定単位: ルール単位 ／ **Export: △（`GET /inventory/managedObjects?fragmentType=c8y_SmartRule` — 公式にドキュメント化されていない経路）** ／ **Import: △（同・要実機検証）**
+
+**前提条件**: テナントが **Smartrule マイクロサービス**と **Apama-ctrl マイクロサービス**の**両方**にサブスクライブされていること。
+
+**マネージドオブジェクトの構造**（Java SDK `SmartRuleRepresentation` = `c8y.SmartRuleRepresentation` フラグメント）
+
+| フィールド | 型 | 内容 | 自動投入時の注意 |
+|-----------|-----|------|----------------|
+| `ruleTemplateName` | String | 使用するテンプレート名（シナリオ名） | 下記11テンプレートから選択 |
+| `name` | String | ルール名 | — |
+| `type` | String | 型 | — |
+| `config` | Map | テンプレート固有パラメータ（閾値、宛先メールアドレス等） | テンプレートごとに構造が異なる |
+| `enabledSources` | List | 適用対象アセットのID群 | **環境固有のデバイスIDを含む → 投入順序はデバイス→スマートルール** |
+| `disabledSources` | List | 除外アセットのID群 | 同上 |
+| `enabled` | Boolean | 有効／無効 | — |
+| `cepModuleId` | GId | Esperモジュール managed object ID / Apama シナリオインスタンスID | **環境固有 → テナント間移送時は再マッピング必須** |
+| `id` | GId | スマートルール cep module の managed object ID | 同上 |
+| `body` | String | Esperモジュールのパース済みボディ | 生成物。手で書くものではない |
+
+**組み込みテンプレート（11種）**: On alarm send SMS ／ On alarm send email ／ On alarm escalate it ／ On alarm duration increase severity ／ On geofence create alarm ／ On geofence send email ／ Calculate energy consumption ／ On missing measurements create alarm ／ On alarm execute operation ／ On measurement threshold create alarm ／ On measurement explicit threshold create alarm
+
+**メッセージ内変数**: 共通 `#{id}` `#{type}` `#{source}` `#{time}` `#{text}` ／ アラーム系 `#{status}` `#{severity}` `#{count}` ／ 計測値系 `#{valueFragment}` `#{valueSeries}` `#{value}` `#{unit}` ／ ネスト `#{X.Y}` `#{X.Y.Z}`
+
+**権限**: グローバルルールの閲覧＝「Global smart rules」または「CEP management」の READ ＋「Inventory」の READ、作成/編集/削除＝ADMIN。ローカルルールはインベントリ権限（またはインベントリロール）のみで制御され専用権限は不要。
+
+> ⚠️ **専用RESTエンドポイントは公式に文書化されていない**。Cockpit のドキュメントはGUI手順のみで、エンドポイント・マネージドオブジェクト型・JSONペイロード・エクスポート/インポート・CLIのいずれにも言及がない。go-c8y-cli にも `smartrules` の生成済みコマンドは存在しない。**Inventory API 直叩き経路は実機検証が必須。**
+
+> 🔀 **「Smart rules (NEW)」プラグインは別物**: Analytics Builder のモデルインスタンスをデバイス／グループ文脈から作成・管理する新方式で、**実体は Analytics Builder のモデル＋インスタンス**（＝投入経路は §3.3 の `c8y-analytics`）。権限はグローバルロール配下の「Smart rule instances」（READ / ADMIN）。前提はStreaming Analyticsマイクロサービスのサブスクリプション＋対象アプリへのプラグイン導入。**どちらを標準採用するかは設計判断が必要。**
+
+📌 出典: `https://cumulocity.com/docs/cockpit/smart-rules/`、`https://cumulocity.com/docs/cockpit/smart-rules-collection/`、`https://cumulocity.com/docs/streaming-analytics/smart-rules-plugin/`、`http://resources.cumulocity.com/documentation/javasdk/1007.5.0/com/cumulocity/rest/representation/cep/SmartRuleRepresentation.html`
+
+### 3.6 アプリケーション / マイクロサービス ⚠️
 
 UIパス: Administration > Ecosystem > Own applications ／ 設定単位: アプリケーション単位 ／ 設定方法: **ZIPアップロード** / REST（Application API）/ go-c8y-cli ／ Export: ○（ZIP） ／ Import: ○（ZIP）
 
@@ -460,7 +593,7 @@ UIパス: Administration > Ecosystem > Own applications ／ 設定単位: アプ
 | デプロイ自動化 | CI/CDからの投入 | go-c8y-cli の deploy コマンド | スクリプト化が可能 |
 | （注記） | 個別フィールド | **今回の調査では未取得**。実機確認時に補完 | — |
 
-### 3.5 デバイス可用性・監視 ⚠️
+### 3.7 デバイス可用性・監視 ⚠️
 
 UIパス: Device Management > 対象デバイス ／ 設定単位: デバイス単位 ／ 設定方法: UI / REST（Inventory API） ／ Export: △ ／ Import: △
 
@@ -482,3 +615,8 @@ UIパス: Device Management > 対象デバイス ／ 設定単位: デバイス�
 3. **不可逆・伝播しない設定に注意** — Retention rules の期間短縮（データ削除は復旧不可）、テナントポリシー（作成時のみコピー・以後の編集は伝播しない）、Data broker の Target URL（保存後変更不可）、アラームマッピングの Alarm type（作成後変更不可）。
 4. **ログインモードの変更は退路を断ちうる** — SSO redirect を選ぶと Basic Auth と OAI-Secure のログインオプションが除去される。
 5. **既定値カタログは存在しない** — テナントオプション/システムオプションの網羅的な既定値一覧表は公式ドキュメントに見つからない。実テナントで `GET /tenant/system/options` / `GET /tenant/options` を実行して現物を採取すること。
+6. **🔷「全設定をJSONでダンプして別環境に完全再現」は原理的に不可能** — ①`credentials.` プレフィックス付きオプションは GET しても固定文字列 `"<<Encrypted>>"` しか返らない（復号はオーナーのマイクロサービスのシステムユーザーに対してのみ行われる）。②management テナントが `editable=false` にしたオプションはテナント側の PUT/DELETE が **403** になる。**秘匿値は Vault 等で別管理し、投入スクリプトが注入時に埋める設計が必須**。投入スクリプトは403を「意図的なロック」として扱い、ロック済み項目を可視化できるようにすること。
+7. **🔷 Edge の設定投入は逐次実行が強制される** — `/edge/...` API の POST はすべて非同期タスクで、**同時実行するとHTTP 409**。並列化してはならず、`GET /edge/tasks/{id}` の完了待ちを挟むこと。ファイルアップロードは**10秒タイムアウト**があり、大容量ファイルは直接ストリームしないと失敗する。
+8. **🔷 不可逆設定がEdgeにも存在** — `POST /edge/configuration/security` の `OS.audit_logging_enabled` は**一度有効化すると無効化できない**。設定定義ファイルの既定値設計時に要注意。
+9. **🔷 go-c8y-cli には `loginOptions` / `smartrules` / EPL / Analytics Builder の生成済みコマンドがない** — 前2者は汎用 `c8y api`、後2者は `c8y-analytics` 拡張で補う。またCLIのフラグ検証はプラットフォーム仕様と乖離することがある（例: `retentionrules create` の `dataType` に `BULK_OPERATION` が欠落）ため、**CLIを仕様の正としてはいけない**。
+10. **🔷 公式のTerraform provider / Ansible collection は存在しない** — Postman collection もコミュニティ製で、公式は OpenAPI 仕様への移行を理由に v1 collection の保守を終了している。**IaC基盤は go-c8y-cli + jsonnet テンプレート、または OpenAPI からのクライアント生成で自作するのが現実解**。
