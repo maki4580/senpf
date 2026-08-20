@@ -3,7 +3,7 @@
 **— 本構成における Cumulocity Edge の使い方の定義と、その設定への落とし込み —**
 
 **対象構成**: [cumulocity-iot-architecture.drawio](cumulocity-iot-architecture.drawio) —「全体構成(配置構成・レビュー反映)」タブ**のみ**
-**版**: rev.1（2026-08-20）
+**版**: **rev.2（2026-08-21）** — 一次情報照合（ファクトチェック）の反映。[レビュー結果](Cumulocity利用設計書_ファクトチェック結果.md) / [詳細レポート](factcheck/)
 **位置づけ**: **Cumulocity 側設計の「正」**。本構成において Cumulocity Edge を「何のためにどう使うか」を Cumulocity の概念軸（グループ / デバイス / データ種別 / ルール / 通知 / ロール / テナントオプション）で定義し、その定義を Cumulocity Edge の**設定項目・設定手段・設定値**へ落とすところまでを一冊で担う
 **ベース文書**: [IoT連携チーム_担当範囲設計書.md](IoT連携チーム_担当範囲設計書.md)（以下 **[担当範囲]**）
 **前提**: 外部Gateway の配置は**案 β**（拠点ごとに thin-edge インスタンスを分ける・[担当範囲] §2.5）。案 α を採る場合の差分は**付録 A**
@@ -126,10 +126,15 @@
 | **前提 1** | 外部Gateway は**案 β**（拠点ごとに thin-edge インスタンス） | §1.2 の階層図・§6.2 のデータ経路・§10.2 の購読設計が変わる → **付録 A** に差分を用意 | [担当範囲] W0-10 |
 | **前提 2** | `alarmsWithChildren` が**グループの `childAssets` を辿る** | **§1 の拠点分離方式と §10 の購読設計が同時に破綻する。D17 の実現方式そのものを再設計** | **SV-35 / TE-12（最優先）** |
 | **前提 3** | Cumulocity の **certificate-authority（EST）が Edge で使える** | §3.3 の登録方式が「自前 CA を trusted certificate に登録する従来方式」に落ち、§3.6 の証明書自動更新を別途設計する必要がある | **SV-08 / TE-8（最優先）** |
-| **前提 4** | Edge 上で **Notification 2.0 が実動作する**（WebSocket が LoadBalancer 経由で到達できる） | §10 が丸ごと成立しない。**変-2 と併せて、通知経路がゼロになる** | **SV-05（最優先）** |
+| **前提 4** | Edge 上で **Notification 2.0 が実動作する**（WebSocket が LoadBalancer 経由で到達できる）。**機能として使えること自体は [確]**（`Messaging Service: Included`） | 到達できなければ §10 の経路が成立しない。**変-2 と併せて、通知経路がゼロになる** | **SV-05** |
 | **前提 5** | イベント/アラーム型・external ID 採番規約（§2.2・§6.4）が**関係チームと合意される** | §9 のマッピング・§7.2 の type フィルタ・§8 のルール条件・§10.2 の `typeFilter` が全部やり直し | [担当範囲] C-1 / C-2 |
+| **前提 6** 〈rev.2〉 | Edge 同梱の Apama-ctrl で **EPL Apps が使える** | **§8 の RL-b・RU-2〜RU-5 が全て EPL 前提。§8 の過半が成立しない** | **SV-45（最優先）** |
+| **前提 7** 〈rev.2〉 | Inventory ロールが **`childDevices`（カメラ・BOX）まで継承される** | **拠点 Manager がカメラ個別のアラーム・インベントリを見られず §11.3 が崩れる**。前提 2 と同型 | **SV-47（最優先）** |
+| **前提 8** 〈rev.2〉 | リテンションの「既定 60 日」が**削除可能なルールとして存在する** | **システム設定側の値なら、90 日ルールを入れても 60 日で消える。§7.2 が崩れる** | **SV-43（最優先）** |
 
-> ⚠️ **前提 2〜4 は「検証環境で最初に潰す」項目です。** 本書の設計を本番へ投入する前に、[担当範囲] W1-2 / W1-3 / W1-10 を完了させてください。
+> ⚠️ **前提 2・3・6・7・8 は「検証環境で最初に潰す」項目です。** 本書の設計を本番へ投入する前に、[担当範囲] W1-2 / W1-3 / W1-10 を完了させてください。
+
+> ⚠️⚠️ **rev.2 で前提が 3 つ増えました。** いずれも rev.1 が [確] としていた（あるいは疑問にすら上がっていなかった）事項が、一次情報照合で未確認と判明したものです。**前提 2 と前提 7 は「グループやデバイスの配下をどこまで辿るか」という同一の疑問**であり、**同じ階層構成で同時に検証してください**（§14 CT-4）。
 
 ### 0.8 本書の構造
 
@@ -169,12 +174,16 @@
 | # | 役割 | 根拠 | 効く章 |
 |---|---|---|---|
 | **1** | **拠点分離の単位** | D17。Edge はシングルテナントで拠点ごとのサブテナントを作れない [確]。グループ + Inventory ロールが唯一の代替 | §11.3 |
-| **2** | **Inventory ロールの割当単位** | ロールは親グループ → サブグループ → デバイスへ継承される [確] | §11.3 |
-| **3** | **Notification 2.0 サブスクリプションの `source`** | `context: mo` + `source` = 拠点グループ MO + `alarmsWithChildren` で拠点単位の購読になる [確] | §10.2 |
+| **2** | **Inventory ロールの割当単位** | ロールは親グループ → サブグループ → **それらのグループに属するデバイス**へ継承される [確]。⚠️ **その先の `childDevices`（カメラ・BOX）まで届くかは未確認**（SV-47・§11.3） | §11.3 |
+| **3** | **Notification 2.0 サブスクリプションの `source`** | `context: mo` + `source` = 拠点グループ MO + `alarmsWithChildren` で拠点単位の購読になる **[推]**。⚠️ **「descendant」がどの関係を辿るかは公式に記述が無い**（前提 2 / SV-35・§10.2） | §10.2 |
 | **4** | **一括オペレーションの対象指定** | bulk operation の `groupId` は *"Identifies the target group on which this operation should be performed."* [確]。**API 経由の一括オペレーションはグループ指定が事実上の前提** | §4.8 |
 | **5** | **段階ロールアウトの単位** | AI モデル配布・設定配布を 1 拠点 → 数拠点 → 全拠点で進める単位 | §4.9 |
 
-> ⚠️ **役割 3 が成立するかは未確認です（前提 2 / SV-35）。** 成立しない場合の代替は §1.6 に置きます。
+> ⚠️⚠️ **役割 2 と 3 は、いずれも「デバイス配下の子デバイスまで届くか」という同一の未確認事項に依存しています。**
+> - 役割 3（通知）＝ 前提 2 / SV-35 → §10.2
+> - 役割 2（Inventory ロール）＝ SV-47 → §11.3
+>
+> **rev.1 は役割 3 を [確] としていましたが、7 経路の探索の結果「公式のどこにも書かれていない」ことが確定したため [推] に格下げしました**（§10.2）。§1.6 の [要] 表記と整合させています。**両方を同じ階層構成で同時に実機検証してください**（§14 CT-4）。成立しない場合の代替は §1.6 に置きます。
 
 ### 1.2 階層設計（案 β 採用時の最終形）
 
@@ -240,26 +249,53 @@ Inventory ロールの継承経路                    └── BOX ×M    ←�
 | 項目 | 規約 | 理由 |
 |---|---|---|
 | **グループ表示名** | 日本語可（例: 「〇〇工場 東棟」） | 運用者が読む |
-| **グループ external ID** | **拠点コード**（例: `site-001`）。**英数字のみ** | 冪等投入の土台。名前だけで参照すると再実行で重複グループが生える |
+| **グループの同定キー** 〈rev.2 改訂〉 | **`x_Site.siteId` フラグメント**（例: `site001`）。**external ID は振らない**（下記） | 冪等投入の土台。名前だけで参照すると再実行で重複グループが生える |
 | **拠点コード** | **`^[a-zA-Z0-9]+$` に適合すること** | Notification 2.0 の `subscription` 名がこのパターン [確]。**ハイフン・アンダースコア・日本語は不可** |
 
-> ⚠️⚠️ **`site-001` はハイフンを含むため、Notification 2.0 の `subscription` 名にはそのまま使えません** [確]。次のいずれかを §2.5 で確定してください。
+> ⚠️⚠️ **`site-001` はハイフンを含むため、Notification 2.0 の `subscription` 名にはそのまま使えません** [確]（`pattern: '^[a-zA-Z0-9]+$'`）。次のいずれかを §2.5 で確定してください。
 >
-> - **(a) 拠点コードを最初から英数字のみにする**（例: `site001`）。external ID・グループ名・トピック名を 1 つの値で通せる → **[判] 推奨**
+> - **(a) 拠点コードを最初から英数字のみにする**（例: `site001`）。1 つの値で通せる → **[判] 推奨**
 > - (b) 拠点コード（`site-001`）とトピック名用コード（`site001`）を別に持ち、対応表を維持する
 >
 > **(b) は対応表が second source of truth になり、拠点追加のたびに同期漏れのリスクを負います。(a) を推奨します。**
 
+> **[確] この制約が効くのは `subscription` 名の 1 用途だけです。** rev.1 は「external ID・グループ名・トピック名を 1 つの値で通す」ために英数字制約を全体へ広げていましたが、**仕様上そうしなければならない理由はありません**:
+>
+> - `subscription` は購読の名前であって MO の external ID ではない（*"Several subscriptions can share the same name"*）
+> - サブスクリプションが MO を指すのは `source.id` = **内部 ID** であり、external ID ではない（例: `id: '251982'`）
+> - サブスクリプションの一意キーは (`source`, `context`, `subscription`) の三つ組
+> - なお **`^[a-zA-Z0-9]+$` は Core OpenAPI 全体で唯一の `pattern:` 宣言**で、他の識別子に文字種制約はありません
+>
+> **したがって (a) は「そうしないと動かない」ではなく「1 値で通すと運用が単純になる」という [判] です。** 実務上は (a) を推奨しますが、**拠点コードにハイフンを使いたい業務上の理由があるなら (b) も成立します**（対応表の維持コストとの比較）。
+
 **[判] 本書は以降 `site001` 形式（英数字のみ）を採用した表記を併記しますが、実値の確定は §2.5 に委ねます。**
+
+#### ⭐ グループの external ID は不要です 〈rev.2〉
+
+**[判] 拠点グループに external ID を振るのをやめ、`x_Site.siteId` フラグメントを同定キーにします。**
+
+| 観点 | 結論 |
+|---|---|
+| **Cumulocity 上の必要性** | **無い。** managed object は内部 ID だけで成立し、`managedObject` スキーマに必須項目は 1 つもありません。external ID は「デバイスが自分の MO を見つける」ための追加機構です |
+| **冪等投入の土台になるか** | **external ID でなくても同じことができます。** `?query=$filter=(has(c8y_IsDeviceGroup) and x_Site.siteId eq 'site001')` で一意に引けます（§1.5 で `x_Site` は既に必須）。**API 呼び出し回数も「クエリ → 分岐」で変わりません** |
+| **Cumulocity 自身はどうしているか** | **名前ベースで冪等生成しています。** bulk device registration の `PATH` 列で自動生成されるグループに **external ID は付きません** |
+| **go-c8y-cli はどうしているか** | 内部のグループ解決も `has(c8y_IsDeviceGroup) and name eq '<name>'` のクエリです |
+
+**やめる利点**: 同じ実体に「external ID」と「`x_Site.siteId`」という 2 つの同定キーが並ぶ状態（second source of truth）を解消できます。両方あると、片方だけ直した投入スクリプトが静かに別グループを作ります。
+
+> ⚠️ **グループ名は一意ではありません。** 「名前だけで参照すると再実行で重複グループが生える」という rev.1 の懸念自体は正しく、**同名グループは作れてしまいます**（`POST /inventory/managedObjects` は 409 を返しません → §13.5）。**したがって同定キーは必要で、それを `x_Site.siteId` にする**という変更です。「同定キーを無くす」ではありません。
+
+> ⚠️ **デバイスの external ID は話が別です。やめられません** → §2.2。
 
 ### 1.5 グループに持たせるフラグメント
 
 | フラグメント | 対象 | 内容 | 用途 |
 |---|---|---|---|
 | `c8y_IsDeviceGroup` | 全グループ | Cumulocity 標準 | グループとして認識される |
-| `x_Site` | 拠点グループ | `{ "siteId": "site001", "siteName": "〇〇工場 東棟" }` | 拠点コードの正引き。**デバイス側の `x_Site` と同じキーを使う**（§6.4） |
+| **`type`** | 全グループ | root = **`c8y_DeviceGroup`** / サブグループ = **`c8y_DeviceSubGroup`** | ⭐ **rev.2 で追加。** go-c8y-cli の `--excludeRootGroup` が `not(type eq 'c8y_DeviceGroup')` を使うなど、**ツール側がこの値を前提にしています**。省略すると絞り込みが効きません |
+| `x_Site` | 拠点グループ | `{ "siteId": "site001", "siteName": "〇〇工場 東棟" }` | ⭐ **拠点グループの同定キー**（§1.4）。冪等投入・拠点コードの正引き。**デバイス側の `x_Site` と同じキーを使う**（§6.4） |
 
-> **[判] グループにも `x_Site` を持たせてください。** デバイス側だけに持たせると、「グループ ID から拠点コードを引く」処理が名前解析になります。
+> **[判] `x_Site.siteId` は拠点グループの同定キーです。必須項目として扱ってください。** rev.1 では「あると便利なフラグメント」でしたが、rev.2 で **external ID を廃止した結果、これが唯一の同定キー**になりました（§1.4）。**未設定のグループを作らないこと。** §13.7 のアサートに「全拠点グループに `x_Site.siteId` があり、値が重複していないこと」を追加してください。
 
 ### 1.6 ⚠️ 拠点分離の成立条件と、不成立時の代替
 
@@ -267,8 +303,8 @@ Inventory ロールの継承経路                    └── BOX ×M    ←�
 
 | # | 条件 | 状態 | 不成立時に壊れるもの |
 |---|---|---|---|
-| **1** | Inventory ロールがグループ配下へ継承される | **[確]** 成立 | — |
-| **2** | `alarmsWithChildren` / `eventsWithChildren` が **`childAssets` を辿る** | **[要] 未確認（SV-35 / TE-12）** | **拠点グループ単位の通知購読が全滅** |
+| **1** | Inventory ロールがグループ配下へ継承される | **[確]** グループ内デバイスまでは成立。⚠️ **`childDevices`（カメラ・BOX）まで届くかは [要 SV-47]** | 拠点 Manager がカメラ個別のアラーム・インベントリを見られない |
+| **2** | `alarmsWithChildren` / `eventsWithChildren` が **`childAssets` を辿る** | **[要] 未確認（SV-35 / TE-12）**。公式は *"all of its descendant managed objects"* としか述べず、**関係の種別を特定していない**（§10.2） | **拠点グループ単位の通知購読が全滅** |
 | **3** | `ROLE_NOTIFICATION_2_ADMIN` が拠点分離をバイパスしない運用が確立している | **[確] バイパスする**。§10.4 のトークン発行プロキシで封じる | 案件アプリが全拠点のアラームを購読できてしまう |
 
 #### 条件 2 が不成立だった場合の代替案
@@ -285,7 +321,7 @@ Inventory ロールの継承経路                    └── BOX ×M    ←�
 
 | # | 規約 | 理由 |
 |---|---|---|
-| **G-a** | **すべてのグループに external ID を振る** | 名前だけで参照すると再実行で重複グループが生える |
+| **G-a** 〈rev.2 改訂〉 | **すべての拠点グループに `x_Site.siteId` を振り、これを同定キーにする**（external ID は振らない・§1.4） | グループ名は一意ではなく、`POST /inventory/managedObjects` は 409 を返さないため、**同定キーが無いと再実行で重複グループが黙って生える**（§13.3.3） |
 | **G-b** | **拠点コードは英数字のみ**（§1.4） | Notification 2.0 の `subscription` 名がパターン `^[a-zA-Z0-9]+$` [確] |
 | **G-c** | **Inventory ロールは拠点グループに割り当てる。デバイス個別に割り当てない** | 継承される。**個別割当は SSO の `inventoryMappings` に次回ログインで上書きされる** [確] |
 | **G-d** | **段階ロールアウトの単位も拠点グループ** | bulk operation の `groupId` がグループ指定を前提とする [確] |
@@ -324,23 +360,55 @@ device type ──┬─► リテンションの type フィルタ（§7.2）
 
 **[判] 形式**: `{siteId}:{機器種別}-{シリアル}`
 
+> ⚠️⚠️ **「external ID を採番しない」という選択肢はデバイスには存在しません** [確]。thin-edge / Cumulocity が**必ず自動生成**します。したがって本節が決めているのは「external ID を持つかどうか」ではなく **「自動生成に任せるか、意味のある値を与えるか」** です。
+>
+> | 対象 | 何もしないとどうなるか |
+> |---|---|
+> | **main device** | **証明書の CN がそのまま external ID になります**（`type: c8y_Serial`）。`tedge cert create --device-id <X>` の `<X>` = 証明書 CN = MQTT ClientId = external ID = MO の `name` が**すべて同一値に固定**されます |
+> | **child device** | thin-edge が **`<main-device-id>:device:<topic-id>`** を自動生成します（`/` は `:` に変換）。`@id` を明示すればその値が verbatim で使われます |
+>
+> **グループは別です。グループに external ID は不要で、rev.2 で廃止しました** → §1.4。
+
 | 対象 | external ID | 例 |
 |---|---|---|
-| 拠点グループ | `{siteId}` | `site001` |
-| 画像解析装置（main device） | `{siteId}:ANLZ-{シリアル}` | `site001:ANLZ-SN00123` |
+| 拠点グループ | ⚠️ **振らない**（`x_Site.siteId` で同定・§1.4） | — |
+| 画像解析装置（main device） | **`{siteId}-ANLZ-{シリアル}`** | `site001-ANLZ-SN00123` |
 | IP カメラ（child device） | `{siteId}:CAM-{シリアル}` | `site001:CAM-SN12345` |
-| BOXゲートウェイ（main device） | `{siteId}:GW-BOX` | `site001:GW-BOX` |
+| BOXゲートウェイ（main device） | **`{siteId}-GW-BOX`** | `site001-GW-BOX` |
 | 画像センシングBOX（child device） | `{siteId}:BOX-{シリアル}` | `site001:BOX-SN98765` |
+
+> ⚠️⚠️ **rev.2 で main device の区切りをコロンからハイフンに変更しました。コロンは使えません** [確]:
+>
+> > *"the following format should be used for the ClientId: `connectionType:deviceIdentifier:defaultTemplateIdentifier`"*
+> > *"**Important** — The colon character has a special meaning in Cumulocity. Hence, it must not be used in the `deviceIdentifier`."*
+> > *"Set CLIENT_ID to the common name of the device certificate. **The certificate common name must not contain `:`**."*
+> > — [MQTT device integration](https://cumulocity.com/docs/device-integration/mqtt/)
+>
+> main device では次の連鎖が確定しており、**external ID を決める手段は証明書 CN しかありません**:
+>
+> ```
+> tedge cert create --device-id <X>   →   証明書 CN = <X>
+>   → device.id = <X>（tedge.toml より証明書が優先）
+>   → MQTT ClientId = <X>（CN と一致必須）
+>   → Cumulocity external ID = <X>（type: c8y_Serial・接続時に自動生成）
+>   → MO の name = <X>（thin-edge が 100,<device.id>,<device.type> を送る）
+>   → EST の CSR も CN = <X>（*"CSR must be a valid PKCS#10 with deviceID as Common Name (CN)"*）
+> ```
+>
+> **`site001:ANLZ-SN00123` のままでは、`connectionType=site001` / `deviceIdentifier=ANLZ-SN00123` と誤解釈されうるうえ、証明書 CN として不正です。**
+>
+> **child device は `:` のままで問題ありません。** 証明書も MQTT 接続も持たず、SmartREST 101 経由で作られるためです（thin-edge の自動生成値 `<main>:device:<child>` 自体がコロンを含みます）。
 
 **規約**:
 
 | # | 規約 | 理由 |
 |---|---|---|
-| **X-a** | **`{siteId}` プレフィックスを必ず付ける** | 全拠点が単一テナントに集約されるため（D17）、シリアルだけでは衝突し得る。また案 α では 1 thin-edge インスタンス内での一意性も必要 |
+| **X-a** | **`{siteId}` プレフィックスを必ず付ける** | 全拠点が単一テナントに集約されるため（D17）、シリアルだけでは衝突し得る。**thin-edge 自身が同じ理由で child に main の ID を prefix しています**。また案 α では 1 thin-edge インスタンス内での一意性も必要 |
 | **X-b** | **機器種別は `ANLZ` / `CAM` / `GW` / `BOX` の 4 語に固定** | 型からの逆引きと機械検査を単純にする |
-| **X-c** | **区切りは `:`（拠点）と `-`（種別とシリアル）で固定** | パース規則を 1 つにする |
-| **X-d** | **シリアルは機器の物理シリアルを使う。連番を振らない** | 交換時に同一性を追跡できる（§3.9） |
-| **X-e** | ⚠️ **一度登録した external ID は変更できない** [確] | thin-edge の `@id` は登録後変更不可。**間違えたら削除して作り直すしかない**（§2.6 E-e） |
+| **X-c** 〈rev.2 改訂〉 | **main device は区切りをすべて `-` にする。child device は `:`（拠点）と `-`（種別とシリアル）** | main はコロン禁止（上記）。child は thin-edge の自動生成形式に合わせる |
+| **X-d** 〈rev.2 改訂〉 | **シリアルは機器の物理シリアルを使う。連番を振らない** | 資産管理台帳と突合できる。⚠️ **rev.1 の理由「交換時に同一性を追跡できる」は §3.9 の判断（交換時は新 external ID を振る）と矛盾していたため差し替えました** |
+| **X-e** | ⚠️ **一度登録した external ID は変更できない** [確] | thin-edge の `@id` は登録後変更不可（main device は *"Updating the external id of {0} is not supported"* で明示的に拒否）。**間違えたら削除して作り直すしかない**（§2.6 E-e）。⚠️ なお **Cumulocity 側は DELETE + POST で付け替え自体は可能**です（Identity API に PUT/PATCH が無いだけ）。制約は thin-edge 側 |
+| **X-f** 〈rev.2 で追加〉 | ⚠️⚠️ **main device の external ID に `:` を使わない** | 証明書 CN・MQTT ClientId と同一値になるため。**§2.8 CK-1 で機械検査する** |
 
 > ⚠️⚠️ **この external ID は 3 つ目の役割でクラウドへ出ます。** ベクトルDB に格納された特徴量は AI モデル改善サービス（クラウド）へ送信されます。**シリアル番号や拠点コードが顧客の業務 ID を含む場合、仮名化の要否が個人情報保護上の論点になります。**
 >
@@ -445,16 +513,21 @@ curl -X POST http://127.0.0.1:8000/te/v1/entities -H 'Content-Type: application/
 
 ### 2.7 文字種・長さの制約一覧
 
-**[要] いずれも実機で確認してください（TE-6 / V18）。**
-
 | 対象 | 制約 | 確度 |
 |---|---|---|
-| Notification 2.0 の `subscription` 名 | **`^[a-zA-Z0-9]+$`** | [確] |
-| thin-edge の topic id | `/` `+` `#` 不可。`/` は external ID 生成時に `:` に変換される | [確] |
+| Notification 2.0 の `subscription` 名 | **`^[a-zA-Z0-9]+$`** / `minLength: 1` / **`maxLength` の定義なし**。⚠️ **Core OpenAPI 全体で唯一の `pattern:` 宣言** | [確] |
+| thin-edge の topic id | 4 セグメント固定（`device/<id>/service/<id>`）で **`/` は区切りとして必ず含む**。**セグメント内**の `/` `+` `#` が不可。external ID 生成時に `/` は `:` に変換される | [確] |
 | オペレーション定義ファイル名 | **英数字と `_` のみ**（ハイフン不可。使うと定義が無視される） | [確] |
-| `c8y_RequiredAvailability.responseInterval` | `-32768`〜`32767`（範囲外は境界に丸められる） | [確] |
-| external ID の文字種・長さ | **未確認**。`site001:CAM-SN12345` 形式が通るかを実機確認 | **[要 TE-6]** |
-| `device.id`（証明書 CN 由来） | 同上 | **[要 TE-6]** |
+| `c8y_RequiredAvailability.responseInterval` | `-32768`〜`32767`（範囲外は境界に丸められる）。**0 以下はメンテナンスモード**（§5.2） | [確] |
+| **external ID（Identity API 側）** | **無制約。** `externalId` スキーマに `pattern` / `minLength` / `maxLength` の定義が**一切ありません** | **[確]** 〈rev.2 で確定〉 |
+| **`device.id` = 証明書 CN = MQTT ClientId（main device）** | ⚠️⚠️ **`:` 不可**（*"The colon character … must not be used in the `deviceIdentifier`"* / *"The certificate common name must not contain `:`"*）。`c8y deviceregistration register-ca --id` は最大 1000 文字 | **[確]** 〈rev.2 で確定〉 |
+| **フラグメント名** | **空白と `. , * [ ] ( ) @ $ / '` が不可**（*"Names used for fragments must not contain whitespaces nor the special characters …"*） | **[確]** 〈rev.2 で追加〉 |
+| managed object 1 件の JSON サイズ | 上限 **16 MiB**、**1 MiB 未満を推奨** | [確] 〈rev.2 で追加〉 |
+| 1 グループあたりのサブアセット数 | **1000 未満を推奨** | [確] 〈rev.2 で追加〉 |
+
+> ⭐ **rev.2 で TE-6 は解消しました。** rev.1 は「external ID の文字種・長さは未確認」としていましたが、**Identity API 側は無制約であることが OpenAPI スキーマから確定**しました。**実際に制約が効くのは main device の経路だけ**（証明書 CN / MQTT ClientId のコロン禁止）で、これも公式に逐語記述があります。**実機確認は不要です。**
+
+> ⚠️ **MQTT 3.1 を使う場合は ClientId の長さにも注意してください。** 24 文字を超えるとエラーになる実装があります（MQTT 3.1.1 以降なら制約なし）。
 
 ### 2.8 規約準拠の機械検査
 
@@ -462,12 +535,18 @@ curl -X POST http://127.0.0.1:8000/te/v1/entities -H 'Content-Type: application/
 
 | # | 検査 | 実装 | 不合格時 |
 |---|---|---|---|
-| **CK-1** | 全 MO の external ID が `^[a-z0-9]+:(ANLZ\|CAM\|GW\|BOX)-.+$` に適合 | `GET /identity/externalIds` を全走査 | CI 失敗 |
+| **CK-1a** | **main device** の external ID が **`^[a-z0-9]+-(ANLZ\|GW)-.+$`** に適合（**コロンを含まない**こと・X-f） | ⚠️ **`GET /identity/externalIds` は存在しません**（下記）。`GET /inventory/managedObjects?fragmentType=c8y_IsDevice` で MO を列挙 → 各 MO に `GET /identity/globalIds/{id}/externalIds` | CI 失敗 |
+| **CK-1b** | **child device** の external ID が **`^[a-z0-9]+:(CAM\|BOX)-.+$`** に適合 | 同上 | CI 失敗 |
+| **CK-1c** 〈rev.2〉 | **全拠点グループに `x_Site.siteId` があり、値が重複していない**（external ID を廃止したため、これが同定キー・§1.4） | `GET /inventory/managedObjects?fragmentType=c8y_IsDeviceGroup` | CI 失敗 |
 | **CK-2** | 全デバイスの `type` が 4 種のいずれか | `GET /inventory/managedObjects?fragmentType=c8y_IsDevice` | CI 失敗 |
 | **CK-3** | 全 `x_Camera` に `vmsCameraId` が設定されている | 同上 | CI 失敗 |
 | **CK-4** | 全 main device が**いずれかの拠点グループの `childAssets`** に入っている | グループを走査して差集合を取る | CI 失敗 |
 | **CK-5** | external ID のプレフィックス `{siteId}` と、実際に所属する拠点グループが一致 | 同上 | ⚠️ **BOXアダプタの誤配送を検出できる唯一の手段**（§6.2） |
 | **CK-6** | `ROLE_NOTIFICATION_2_ADMIN` が §11.4 の指定ユーザー以外に付いていない | `GET /user/{t}/groups` + `/users` | CI 失敗 |
+
+> ⚠️⚠️ **`GET /identity/externalIds`（コレクション取得）は存在しません** [確]。Identity API のパスは 4 本だけです — `/identity`、`/identity/search`、`/identity/globalIds/{id}/externalIds`、`/identity/externalIds/{type}/{externalId}`。**rev.1 の CK-1 は実装不能でした。** さらに inventory クエリの `has()` は `externalIds` を明示的に除外しているため、**「全 MO 列挙 → 各 MO に N+1 で問い合わせ」以外の実装方法がありません。** MO 数が多いので、CI での実行時間を見積もってください。
+
+> ⚠️ **CK-6 は §11.7 AX-1 と同じ検査です。** 併せて **AS-4（`ROLE_REMOTE_ACCESS_ADMIN` が誰にも付いていないこと）** と **CK-7（アラーム型が他のマッピングキーの前方一致に該当しないこと・§9.2 AM-a）** も CI に載せてください。
 
 > ⚠️ **CK-1〜CK-3 は「壊れても長期間気づけない」種類の破綻です。** 手で 1 台登録すると、その拠点だけ external ID の規約が崩れ、重複排除・映像突合・特徴量紐づけの三重の役割が**静かに**壊れます。**検査を CI に載せることが唯一の歯止めです。**
 
@@ -493,9 +572,9 @@ curl -X POST http://127.0.0.1:8000/te/v1/entities -H 'Content-Type: application/
 | MO 種別 | `com_cumulocity_model_Agent` | `c8y_SupportedOperations` | `c8y_RequiredAvailability` | 必須カスタムフラグメント |
 |---|---|---|---|---|
 | 画像解析装置 | **あり** | フルセット（§4.2） | **あり**（§5.5） | `x_Site{siteId}` |
-| IP カメラ（child） | なし | **なし** | **`responseInterval: 0`**（§5.3） | `x_Camera{vmsCameraId, location}` ← **`vmsCameraId` 必須** |
+| IP カメラ（child） | なし | **なし** | **`responseInterval: 32767`**（§5.4）。⚠️ **`0` は不可** | `x_Camera{vmsCameraId, location}` ← **`vmsCameraId` 必須** |
 | BOXゲートウェイ | **あり** | **縮退**（§4.2） | **あり** | `x_Site{siteId}` |
-| 画像センシングBOX（child） | なし | **なし** | **`responseInterval: 0`** | `x_SensingBox{model, fwVersion, channels}` |
+| 画像センシングBOX（child） | なし | **なし** | **`responseInterval: 32767`**。⚠️ **`0` は不可** | `x_SensingBox{model, fwVersion, channels}` |
 
 ### 3.2 デバイス種別ごとの登録方式
 
@@ -527,7 +606,9 @@ curl -X POST http://127.0.0.1:8000/te/v1/entities -H 'Content-Type: application/
 1. **証明書エンロール**: `AUTH_TYPE=CERTIFICATES` + `ENROLLMENT_OTP`
 2. **device group 階層の自動生成**: スラッシュ区切りの `PATH`。**存在しないグループは作成される**
 
-**制約** [確]: ①`PATH` 使用時は `TYPE` と `NAME` 列も必要 ②`com_cumulocity_model_Agent.active` ヘッダ（値 `true`）が必要 ③**テナント CA の存在が前提** ④`ENROLLMENT_OTP` と `PATH` の併用例は仕様に無い（禁止記述も無い）→ **[要 SV-07]** ⑤UI ウィザードは `ENROLLMENT_OTP` 非対応。
+**制約** [確]: ①`PATH` 使用時は `TYPE` と `NAME` 列も必要 ②`com_cumulocity_model_Agent.active` ヘッダ（値 `true`）が必要 ③**テナント CA の存在が前提** ④**`ENROLLMENT_OTP` と `PATH` は併用可**（CSV ヘッダ表に**両方が独立した任意列**として並記されている。排他は `CREDENTIALS` × `AUTH_TYPE` のみ）→ **SV-07 は [推] へ格下げ** ⑤UI の**一括**登録ウィザードは `ENROLLMENT_OTP` 非対応（⚠️ ただし**単体**登録 UI には OTP 欄があり、`?externalId=…&one-time-password=…` のクエリで事前入力もできる）。
+
+> ⚠️ **`PATH` で自動生成されるグループに external ID は付きません。** Cumulocity 自身がグループを**名前ベースで冪等生成**しています。これは §1.4 で「グループに external ID は不要」と判断した根拠の 1 つです。
 
 > **[判] 一括登録 CSV は「main device の初期投入」にのみ使い、child device（カメラ・BOX）には使いません。** child は thin-edge の entity API で `@id` を指定して登録する必要があるため（§2.6 E-b）、CSV では規約を満たせません。
 
@@ -550,14 +631,22 @@ curl -X POST http://127.0.0.1:8000/te/v1/entities -H 'Content-Type: application/
 |---|---|---|---|
 | 1 | `siteId` 採番・構成コードへの拠点定義追加 | 拠点定義が存在する | ○ |
 | 2 | main device のデバイス証明書取得（§3.6） | main device が Cumulocity に現れる | ○ |
-| 3 | **main device を拠点グループの `childAssets` へ追加** | 拠点グループ配下に表示される | ○（409 黙殺） |
+| 3 | **main device を拠点グループの `childAssets` へ追加** | 拠点グループ配下に表示される | ○（409 黙殺・[確]） |
 | 4 | **child device の明示登録**（`@id` 指定・§2.6） | 全 child が規約どおりの external ID で登録済み | ○ |
 | 5 | **`x_Camera.vmsCameraId` の設定** | **未設定はツールがエラー** | ○ |
-| 6 | child の `c8y_RequiredAvailability = {"responseInterval": 0}` 設定 | メンテナンスモード（§5.3） | ○ |
+| 6 | child の `c8y_RequiredAvailability = {"responseInterval": 32767}` 設定 | 実質無効化（§5.4）。⚠️ **`0` にしない** | ○ |
 | 7 | `x_Site` / `x_SensingBox` フラグメントの設定 | §2.4 のとおり | ○ |
 | 8 | supported operations の確認 | **child には何も出ていない**（§4.3） | — |
 
+> ⚠️⚠️ **手順 6 は「手順 4 の直後・thin-edge の初回接続より前」に実行してください。** SmartREST 117 は既存値を上書きしませんが、**先に入っていた値が勝つ**ため、thin-edge が先に 60 分を書いてしまうと以後どれだけ設定しても変わりません（§5.5）。**プロビジョニングツールの実行順序が結果を決めます。**
+
+> ⚠️ **手順 6 に `0`（メンテナンスモード）を使ってはいけません。** そのデバイスを `source` とする全アラームが抑止され、`x_CameraDown` / `x_BoxSilent` が 1 件も上がらなくなります（§5.2）。
+
 > **冪等化パターン**: 手順 3 は **409 黙殺**（[投入ガイド] パターン E）、手順 4〜7 は **存在チェック → 分岐**（パターン C）→ §13.5
+>
+> ⭐ **[確] 手順 3 の 409 黙殺は妥当です**（SV-38 解消）。OpenAPI の応答定義には 409 がありませんが、go-c8y-cli の公式例が明示しています — *"The `silentStatusCodes` parameter is used to **silence 409 (duplicate) errors, as we don't care if the device is already assigned to the group**."*
+>
+> ⚠️ **ただしグループ作成（G-01）に 409 黙殺は使えません**（§13.3.3）。**`childAssets` への追加は 409 を返すが、MO の作成は返さない** — この非対称に注意してください。
 
 ### 3.6 デバイス証明書のライフサイクル
 
@@ -577,6 +666,12 @@ sudo tedge cert download c8y --device-id "$DEVICE_ID" --one-time-password "$OTP"
 sudo tedge connect c8y
 ```
 
+> **上記 3 コマンドの実在は確認済み** [確]（go-c8y-cli の既定ブランチは `master` ではなく **`v2`**。`master` を見ると「存在しない」と誤判定するので注意）。ただし `c8y devicemanagement certificate-authority create` は docs 上 **「(PREVIEW FEATURE)」** 表記です。
+>
+> ⚠️ **`certificate-authority` フィーチャーは既定で有効**（*"By default, it is enabled"*）なので、手順 (1) の `c8y features enable` は冪等な確認として実行する位置づけになります。
+>
+> ⚠️⚠️ **[要 SV-39] Public Preview → GA の移行に注意。** 公式に *"**Migration from Public Preview to General Availability - action required.** … you need to remove all the devices you have registered under Public Preview and re-register them."* との告知があります。**PoC を Preview 期間中に実施した場合、GA 移行時に全デバイスの再登録が必要になりえます。** 現在の提供ステータスを確認し、PoC と本番の間に移行が挟まらない計画にしてください。
+
 **自動更新** [確]: `tedge-mapper` パッケージが `tedge-cert-renewer@c8y.timer` / `.service` を提供し、**毎時**（`OnCalendar=hourly` + `RandomizedDelaySec=5m`）判定します。判定基準は `certificate.validity.minimum_duration`（**既定 30 日**）[確S]。更新は EST **`simplereenroll`** で行われます。
 
 **Cumulocity 側から見た論点**:
@@ -589,35 +684,68 @@ sudo tedge connect c8y
 | **4** | **有効期限をメタ監視の対象にする** | 期限切れは静かに起きる | §12.7 |
 | **5** | **失効手順（拠点撤収・機器盗難）を runbook 化する** | **監査ログ対象**（[連携仕様] §4.7） | §3.9 |
 
-### 3.7 ⚠️⚠️ テナント CA の毎年 10/2 自動更新
+### 3.7 テナント CA の毎年 10/2 自動更新 — 一斉失効は起きない
 
 **テナント CA は毎年 10 月 2 日 02:00 に自動更新されます** [確]。
 
-> **これは日付が確定した障害リスクです。** 閉域網で `simplereenroll` が期待どおり動かないと、**深夜帯に全拠点のデバイス証明書が順次失効し、全拠点が同時に接続不能**になります。しかも**配布経路（Cumulocity 経由のソフトウェア更新）も同時に使えません。**
+> *"Tenant Certificate Authority (CA) is **automatically renewed on 2 October at 02:00 AM every year**."*
+
+**ただし、この更新でデバイス証明書が失効することはありません** [確]:
+
+> *"**The renewal process ensures that existing device certificates remain valid until their expiration.**"*
+> *"**All CA metadata, private keys, and public keys remain unchanged, ensuring a seamless renewal process. Only NotAfter and NotBefore will be changed.**"*
+> *"Device certificates issued by the CA continue to have 1 year validity from issuance date"*
+> — [Certificate authority](https://cumulocity.com/docs/device-certificate-authentication/certificate-authority/)
+
+**同じ鍵ペア・同じ Subject での再署名**なので、既存のデバイス証明書の署名検証は成立し続けます。影響は接続の張り直し程度です:
+
+> *"**The connected devices may need a moment to reconnect after the renewal**, but it prevents sudden authentication failures"*
+
+> ⚠️⚠️ **旧版（rev.1）は「10/2 深夜に全拠点のデバイス証明書が順次失効し、全拠点が同時に接続不能になる」としていましたが、これは誤りでした。**
+> 「日付が確定した一斉障害」というリスク分析の型そのものは有効ですが、**対象を取り違えていました**。本書はこの型を、次項の「初回エンロール日の集中」に付け替えます。
+
+#### 本当の輻輳リスク — 初回エンロール日の集中
+
+デバイス証明書の更新契機は **CA の更新日ではなく、各デバイスの発行日**です（発行から 1 年・期限 30 日前に `simplereenroll`、§3.6）。したがって:
+
+- **1 拠点を 1 日で一括プロビジョニングすると、その拠点の全デバイスが 11 か月後の同じ日に更新期を迎えます**
+- **複数拠点を同じ週に立ち上げると、その週に更新が集中します**
 
 **[判] 必須対応**:
 
 | # | 対応 | 実施時期 |
 |---|---|---|
-| 1 | **検証環境で時計を進めてシミュレートする**（SV-25 / TE-7） | W1 |
-| 2 | **証明書有効期限をメタ監視の対象にする** | §12.7 |
-| 3 | **運用カレンダーに載せ、当日は要員を確保する** | 運用開始前 |
-| 4 | **新旧 CA を並行して信頼させる移行期間を設計に入れる**（SV-22） | 設計 |
-| 5 | ⚠️ **復旧局面の輻輳対策**: 全拠点が**同時に**再エンロールを試みる。①拠点グループ単位でずらす ②リトライにジッター・バックオフを持たせる、を runbook に含め、**複数デバイス同時実行のケースも検証する** | W1 + runbook |
+| 1 | **証明書有効期限をメタ監視の対象にする**（発行日の分布も可視化する） | §12.7 |
+| 2 | **プロビジョニング計画の段階で、拠点の立ち上げ日を意図的に分散させる**。やむを得ず集中する場合は `certificate.validity.minimum_duration` を拠点ごとにずらして更新期をばらす | 設計・運用開始前 |
+| 3 | **更新の輻輳を検証する**（CT-32 を「CA 更新日のシミュレーション」から「**同一日発行のデバイス群が一斉に更新期を迎える**シミュレーション」へ付け替え）。複数デバイス同時実行のケースを含めること | W1 |
+| 4 | **失効時の現地対応手順を runbook 化する**（§3.6 論点 2・5） | runbook |
+
+> **thin-edge には既にジッターがあります** [確]: `tedge-cert-renewer@c8y.timer` は `OnCalendar=hourly` + `RandomizedDelaySec=5m`（ソース上のコメントは *"Add jitter to prevent a thundering herd of simultaneous certificate renewals"*）。**5 分幅で足りるかは上記 3 の実測で判断してください。**
+
+> ⚠️ **[要 SV-25b] 閉域網で `simplereenroll` が成立すること自体は、CA 更新とは独立に検証が必要です。** 旧版はこの基礎検証を CA 更新シミュレーション（CT-32）に含めていましたが、両者は別物です。**初回 `simpleenroll` と更新 `simplereenroll` を、それぞれ独立したテストケースとして §14 に置いてください。**
 
 ### 3.8 デバイスツイン（フラグメント）の管理方針
 
 **[判] 各フラグメントの「唯一の情報源」を 1 つに固定します。二重管理すると「なぜか設定が戻る」という切り分けの難しい事象になります。**
 
+> **用語**: Cumulocity に「デバイスツイン」という機能名はありません（managed object のフラグメント更新を指す一般語です）。**`twin` は thin-edge 側の一級概念**（`te/<topic-id>/twin/<key>`）で、本節はその両方を扱います。Cumulocity の別製品 Digital Twin Manager（`/service/dtm/`）とは無関係です。
+
 | フラグメント | 唯一の情報源 | Cumulocity 側から書いてよいか |
 |---|---|---|
-| `c8y_RequiredAvailability`（main device） | **thin-edge の `c8y.availability.interval`** | ❌ **書かない**。次回接続時に thin-edge の値で上書きされる |
-| `c8y_RequiredAvailability`（child device） | **プロビジョニングツール**（`responseInterval: 0`） | ✅ プロビジョニングツールのみ |
-| `c8y_SupportedOperations` | **thin-edge の capability メッセージ** | ❌ **書かない**（§4.2） |
+| `c8y_RequiredAvailability`（main device） | **§13 の設定投入（Cumulocity 側）** | ✅ **ここが正**。thin-edge の `c8y.availability.interval` は初回接続時の初期値にすぎない（§5.5） |
+| `c8y_RequiredAvailability`（child device） | **プロビジョニングツール**（`responseInterval: 32767`） | ✅ プロビジョニングツールのみ。**初回接続より前に入れること**（§3.5 手順 6） |
+| `c8y_SupportedOperations` | **thin-edge の capability メッセージ** | ❌ **書かない**。PUT で減らすことは可能だが、次回の 114 再申告で元に戻る（§4.2） |
 | `x_Site` / `x_Camera` / `x_SensingBox` | **プロビジョニングツール**（entity 登録時の twin） | ✅ プロビジョニングツールのみ |
 | `x_NoAutoConfig` | **運用者の判断**（手動または構成コード） | ✅ |
 | `name` | **プロビジョニングツール** | ✅ |
-| `type` | **プロビジョニングツール**（entity 登録時） | ⚠️ **登録後変更不可**（§2.6 E-e） |
+| `type` | **プロビジョニングツール**（entity 登録時） | ⚠️ **[要 TE-23]** 変更可否は §2.6 E-e を要確認（下記） |
+
+> ⚠️⚠️ **`c8y_RequiredAvailability` の「正」の向きを rev.2 で反転しました。**
+> 旧版は「thin-edge が唯一の情報源。Cumulocity 側から書くと次回接続時に上書きされる」としていましたが、**事実は逆**です。SmartREST 117 は *"This will only set the value if it does not exist. Values entered, for example, through the UI, are not overwritten."* [確] であり、**先に入っている値が勝ちます**。
+>
+> したがって「二重管理するな」という原則は変わりませんが、**寄せる先が thin-edge 側ではなく Cumulocity 側**になります。詳細と移行手順は §5.5 を参照してください。
+
+> ⚠️ **[要 TE-23] `type` の変更可否は未確定です。** thin-edge の REST API リファレンスにある *"Updates are limited to the `@parent` and `@health` properties only, so other properties like `@type` and `@id` cannot be updated after the registration"* は、**エンティティ種別 `@type` の話**であって、Cumulocity の MO `type` の話ではない可能性があります。MO の `type` は twin キーとして `PUT /te/v1/entities/{id}/twin/{key}` の対象になりうるため、**実機で確認してください。** §2.6 E-e の断定もこの確認結果に合わせて調整が必要です。
 
 ### 3.9 デバイスの追加・交換・撤去
 
@@ -627,9 +755,19 @@ sudo tedge connect c8y
 | **カメラ / BOX の増設** | child 登録（§3.5 手順 4〜7）を追加分だけ実行 | 冪等なので全件再実行でよい |
 | **カメラ / BOX の撤去** | thin-edge の entity 削除（空 retained）→ Cumulocity の MO を削除するか論理削除するか | ⚠️ **[要]** 過去のイベント・アラームの source が消える。**[判] MO は残し、`x_Retired` フラグメントで論理削除**を推奨 |
 | **装置の交換**（同一 siteId・同一役割） | ⚠️ **シリアルが変わるため external ID が変わる**（§2.2 X-d）。新 external ID で登録 → 旧 MO を論理削除 | **[判] external ID を交換前後で同じにしない。** 同じにすると「いつ交換したか」が追跡できなくなる |
-| **拠点撤収** | ①デバイス証明書の失効 ②MO の論理削除 ③Notification 2.0 サブスクリプションの unsubscribe（§10.5）④Inventory ロール割当の解除 | ⚠️ **③を忘れるとバックログが溜まり続ける** |
+| **拠点撤収** | ①デバイス証明書の失効 ②MO の論理削除 ③Notification 2.0 サブスクリプションの unsubscribe（§10.5）④Inventory ロール割当の解除 | ⚠️⚠️ **③を忘れると、その拠点のアラーム・イベントの POST が 500 で失敗するようになります**（§10.5・バックログ 25 MiB の Hard quota） |
 
 > ⚠️ **撤去・交換の手順は runbook 化してください**（[担当範囲] RB-2 / RB-3 / RB-12）。**特に「MO を物理削除するか論理削除するか」は先に決めてください。** 物理削除すると過去のイベントの `source` が欠損し、オフロード済みデータとの突合ができなくなります。
+
+**物理削除を選ぶ場合の API 仕様** [確] — `DELETE /inventory/managedObjects/{id}` のクエリパラメータ:
+
+| パラメータ | 既定 | 意味 |
+|---|---|---|
+| `cascade` | **`false`** | *"When set to `true` and the managed object is a device or group, all the hierarchy will be deleted."* |
+| `forceCascade` | — | 同上（強制） |
+| `withDeviceUser` | — | *"it deletes the associated device user (credentials)"* |
+
+> ⚠️ **撤収 runbook には `withDeviceUser` を明記してください。** MO だけ消してデバイスユーザーを残すと、失効済み証明書とは別に**認証情報が孤児として残ります**。また **削除は非同期**なので、完了確認を伴わない一括削除は「消えたつもり」を生みます。
 
 ### 3.10 インベントリ整合性の維持
 
@@ -687,7 +825,9 @@ thin-edge (main device) ── supported operations に申告済みのものだ�
 - child device 用は `/etc/tedge/operations/c8y/<child-device-xid>/`
 - 追加で **SmartREST 118 = supported logs / 119 = supported configs** が申告される
 
-> ⚠️ **Cumulocity 側で supported operations を減らすことはできません。** これは**デバイス側（thin-edge）が申告するもの**です。したがって本節の「決定」は thin-edge の構成コードに落ちる要件になります（実装は [担当範囲] §5.8）。
+> ⚠️ **supported operations は「デバイス側（thin-edge）が申告するもの」です。** したがって本節の「決定」は thin-edge の構成コードに落ちる要件になります（実装は [担当範囲] §5.8）。
+>
+> 厳密には `c8y_SupportedOperations` は通常の MO フラグメントなので **Cumulocity 側から PUT で減らすこと自体は可能**ですが、**次回の 114 再申告で元に戻ります**。「減らせない」のではなく「**戻る**」ため、Cumulocity 側で消す運用は取らないでください。
 
 #### **[判] 取捨の決定**
 
@@ -720,9 +860,17 @@ thin-edge (main device) ── supported operations に申告済みのものだ�
 |---|---|
 | 1 | **カメラも BOX（改造不可）もオペレーションを実行できません。** 申告すると Cumulocity の UI に実行ボタンが出て、運用者が実行してしまいます |
 | 2 | 実行されたオペレーションは **PENDING のまま滞留**し、オペレーションのリテンション（§7.2）を圧迫します |
-| 3 | ⚠️ **child device の supported operations は動的に削除できません** [確]（*"Dynamic removal of an operation from the supported operation list is not supported for child devices."*）。**一度申告すると消せない** |
+| 3 | ⚠️ **child device の supported operations は「動的に」削除できません** [確]（*"Dynamic removal of an operation from the supported operation list is not supported for child devices."*）。取り消しにはマッパー再起動を伴う手順が要ります（下記） |
 
-> **[判] 検証項目として明示的に置いてください**（§14 CT-16）: 「カメラ・BOX の詳細画面にオペレーションの実行 UI が出ないこと」。**一度出てしまうと後戻りできないため、パイロット拠点で必ず確認してください。**
+> ⚠️ **rev.1 の「一度申告すると消せない」は過度な一般化でした。** 公式の警告は **動的**削除（capability メッセージの取り下げによる自動反映）が効かないという意味で、**取り消し自体は可能**です。
+>
+> 1. `/etc/tedge/operations/c8y/<child-device-xid>/` から該当ファイルを削除
+> 2. **`tedge-mapper-c8y` を再起動**
+> 3. `tedge mqtt pub te/device/main/service/tedge-mapper-c8y/signal/sync '{}'` で再送（*"This command republishes the supported operations for the main device and **and all its child devices**"*）
+>
+> SmartREST 114 側も *"If you want to remove an item from the supported operations list, send a new 114 request with the updated list"* と明記しています。**「後戻りできない」ことを理由に判断を硬直させないでください**（SV-17 / SV-28 の評価に影響します）。ただし**運用中の全拠点でマッパー再起動が必要**なので、コストが高いことに変わりはありません。
+
+> **[判] 検証項目として明示的に置いてください**（§14 CT-16）: 「カメラ・BOX の詳細画面にオペレーションの実行 UI が出ないこと」。**取り消しには全拠点のマッパー再起動が要るため、パイロット拠点で必ず確認してください。**
 
 ### 4.4 ソフトウェア更新（AI モデル配布）
 
@@ -746,8 +894,9 @@ thin-edge (main device) ── supported operations に申告済みのものだ�
 | **1** | ⚠️ **[要 SV-13 / TE-16] `files/max.size` の実値** | AI モデルのサイズ上限になる。`GET /tenant/system/options` で確認 |
 | **2** | ⚠️ **[要 TE-20] 旧世代の削除運用** | ソフトウェアリポジトリは MongoDB 格納のため肥大化する。**保持世代数と削除運用を決める** |
 | **3** | **段階ロールアウト** | 拠点グループ単位の bulk operation + **`creationRamp` の必須指定**（§4.8） |
-| **4** | **リテンション** | オペレーションは 90 日で削除（§7.2）。**失敗した Operation の記録も消える**ため、結果は `x_ModelApplied` / `x_ModelUpdateFailed` として残す |
-| **5** | **ロールバックは Cumulocity 側の機能ではない** | *"software_update に自動ロールバックは存在しない"* [確]。**プラグイン実装者の責務**（[担当範囲] §6.3） |
+| **4** | **リテンション** | オペレーションは **本書が §7.2 で設定する 90 日**で削除。⚠️ **90 日は Cumulocity の既定ではありません**（既定は 60 日 — *"By default, all historical data is deleted after 60 days"*）。**設定漏れがあると 60 日で消えます。** **失敗した Operation の記録も消える**ため、結果は `x_ModelApplied` / `x_ModelUpdateFailed` として残す |
+| **5** | **ロールバックは Cumulocity 側の機能ではない** | sm-plugin API は *"in case the plugin is able to manage rollbacks"* と述べており、**ロールバックはプラグイン実装者の責務**（[担当範囲] §6.3）。プラットフォームが肩代わりすることはない [確] |
+| **6** | ⚠️⚠️ **sm-plugin の 5 分タイムアウト** | *"If the command fails to return within **5 minutes**, the sm-agent reports a timeout error: `4`: timeout."* [確]。**AI モデルのインストールが 5 分を超えると失敗扱いになります。** モデルサイズ・展開時間の実測が必要（**[要 SV-40]**）。超える場合は、プラグイン側で「起動して即座に戻り、進捗は別途報告する」形にできるかを [担当範囲] §6.3 と調整すること |
 
 ### 4.5 設定配布
 
@@ -769,7 +918,7 @@ thin-edge (main device) ── supported operations に申告済みのものだ�
 | 2 | 設定リポジトリにスナップショットを登録 | `c8y configuration create` |
 | 3 | 配信 | `c8y configuration send`（type + url） |
 | 4 | ⚠️ **現在値の吸い上げ（`c8y_UploadConfigFile`）** | **逸脱検出もロールバック退避も、これが前提**。必ず有効にする |
-| 5 | ⚠️ **配信は URL フェッチ型** | デバイスが Edge の HTTP エンドポイントに到達でき、**社内 CA を信頼している**必要がある（§12.5） |
+| 5 | ⚠️ **配信は URL フェッチ型。ただし URL はマッパーが書き換える** | Cumulocity が渡す URL は、マッパーによって**ローカルの C8Y プロキシ**（既定 `127.0.0.1:8001`）に書き換えられる [確]（*"rewritten by the mapper to a `<c8y-proxy-url>` — a locally accessible URL served by the C8Y HTTP proxy"*）。したがって **main device 自身が Edge の HTTPS に直接到達する必要はありません**。論点になるのは **child 上で agent を動かす場合**で、その child からプロキシに到達できること（既定は HTTP・未認証。HTTPS 化するなら child の OS トラストストアに証明書）が要件（§12.5） |
 | 6 | 権限 | `ROLE_DEVICE_CONTROL_ADMIN` + **`ROLE_INVENTORY_ADMIN`**（設定リポジトリは managed object + バイナリ） |
 
 #### ⚠️ 配布対象の確定が先
@@ -783,13 +932,13 @@ thin-edge (main device) ── supported operations に申告済みのものだ�
 | **IP カメラ**（fps・解像度・検知感度） | ○（child device） | thin-edge 経由の child device オペレーション | **[要 SV-28]**。⚠️ §4.3 で child に何も申告しない方針のため、**現状の設計では配布経路がありません** |
 | **画像センシングBOX** | ○（child） | **改造不可のため対象外** | — |
 
-> ⚠️⚠️ **§4.3（child に何も申告しない）と「カメラへの設定配布」は両立しません。** カメラへの設定配布が要件になる場合、**child に `c8y_DownloadConfigFile` だけを申告する**という選択になりますが、**一度申告すると child からは削除できません** [確]。**SV-17 / SV-28 の決着まで、child には何も申告しない方針を維持してください。**
+> ⚠️ **§4.3（child に何も申告しない）と「カメラへの設定配布」は両立しません。** カメラへの設定配布が要件になる場合、**child に `c8y_DownloadConfigFile` だけを申告する**という選択になります。取り消しは可能ですが**全拠点のマッパー再起動を伴います**（§4.3）。**SV-17 / SV-28 の決着まで、child には何も申告しない方針を維持してください。**
 
 #### ⚠️ 設定配布の落とし穴
 
 | # | 落とし穴 | 対処 |
 |---|---|---|
-| 1 | **ファイルベース設定更新にロールバックは無い** [確] | 独自 config plugin を書くか、配信前の値検証で守る（§4.10 G-3） |
+| 1 | **file プラグイン経由の設定更新にはロールバックが無い** [確]（*"…powered by the file plugin, **no rollback to the old configuration is attempted** to maintain backward compatibility."*）。⚠️ **一方、typed file-based のプラグイン実装側にはロールバック機構がある**（agent が *"calls the plugin's rollback command … to restore the previous configuration"* を行う。**thin-edge 2.0 で追加**） | 独自 config plugin を書くか、配信前の値検証で守る（§4.10 G-3）。**どちらの経路を使うかで前提が変わる**ため [担当範囲] §6.4 と経路を明示的に合わせること |
 | 2 | **単位違い・null でも thin-edge は「適用成功」を返す** | **ホワイトリストと値域を配信側で検証する**（§4.10 G-3） |
 | 3 | 届くのは toml に登録した設定タイプだけ | 対象ファイルの所有権が移ることについて相手チームの合意が必要 |
 
@@ -806,7 +955,9 @@ thin-edge (main device) ── supported operations に申告済みのものだ�
 
 ### 4.7 リモートアクセスの封じ込め
 
-**`c8y_RemoteAccessConnect` は Cumulocity から装置への SSH / VNC を張る機能です。** D9（拠点への着信接続を設けない）の趣旨に照らし、**画像解析装置では無効化します**。
+**`c8y_RemoteAccessConnect` は Cumulocity から装置への SSH / VNC / Telnet を張る機能です。** D9（拠点への着信接続を設けない）の趣旨に照らし、**画像解析装置では無効化します**。
+
+> ⚠️⚠️ **リスクは SSH / VNC にとどまりません。** thin-edge の remote access は **`PASSTHROUGH` タイプで任意の TCP 接続**を通せます [確]（*"arbitrary TCP connections"*）。**封じ込めの必要性は rev.1 の想定より強い**と考えてください。
 
 > ⚠️ **無効化のための thin-edge 設定フラグは存在しません** [確]。次の組み合わせで封じます。
 
@@ -814,23 +965,40 @@ thin-edge (main device) ── supported operations に申告済みのものだ�
 |---|---|---|---|
 | 1 | **`c8y-remote-access-plugin` パッケージを導入しない**（`tedge-full` を使わない） | thin-edge 側 | [判] 最も確実 |
 | 2 | `/etc/tedge/operations/c8y/c8y_RemoteAccessConnect` を削除 → 114 の再送で Cumulocity 側の一覧からも消える | thin-edge 側 | [確] |
-| 3 | `c8y-remote-access-plugin.socket` を disable | thin-edge 側 | [推] |
+| 3 | `c8y-remote-access-plugin.socket` を disable | thin-edge 側 | **[確]**（socket 必須であることは公式に明記） |
 | 4 | ⭐ **Cumulocity テナント側で Cloud Remote Access のロールを誰にも割り当てない** | **Cumulocity 側（本書の担当）** | [判] |
 
-> ⚠️ **2 だけではパッケージの再インストール・更新で復活し得ます。** **1 と 4 を主、2・3 を従**としてください。**4 は本書 §11.2 のロール定義に反映します。**
+**Remote access のタブが UI に出る条件は 3 つすべてが揃ったときです** [確]:
 
-> **検証**（§14 CT-17）: 「Cumulocity UI に Remote access のボタンが出ないこと」「`114` の一覧に `c8y_RemoteAccessConnect` が無いこと」。
+1. Cloud Remote Access マイクロサービスがテナントに subscribe されている
+2. ユーザーに **`ROLE_REMOTE_ACCESS_ADMIN`** が割り当てられている（**既定ではどのグループ・ユーザーにも未割当**）
+3. デバイスが `c8y_RemoteAccessConnect` を申告している
+
+> ⚠️ **2 のロール名を §11.2 R-13 と §13.7 AS-4 に明記してください。** rev.1 はロール名を書いていなかったため、**CI 検査（「誰にも割り当てられていないこと」の確認）が実装できない**状態でした。
+
+> ⚠️ **2 だけではパッケージの再インストール・更新で復活し得ます。** **1 と 4 を主、2・3 を従**としてください。
+
+> ⚠️ **[要 SV-41] そもそも Edge で Cloud Remote Access マイクロサービスが利用可能かが未確認です。** Edge 2026 の機能比較表・Edge OpenAPI・WebSearch の 3 経路で決定的な記述を発見できませんでした。**未サブスクライブなら条件 1 が成立せず、本節の懸念自体が消えます。** §12.4 の導入直後に確認してください。
+
+> **検証**（§14 CT-17）: 「Cumulocity UI に Remote access のボタンが出ないこと」「`114` の一覧に `c8y_RemoteAccessConnect` が無いこと」「**`ROLE_REMOTE_ACCESS_ADMIN` がどのグローバルロールにも含まれないこと**」。
 
 ### 4.8 一括オペレーションと流量制御
 
 | 項目 | 内容 | 確度 |
 |---|---|---|
 | **対象指定** | bulk operation の `groupId`（拠点グループ） | [確] |
-| ⭐ **流量制御** | リクエスト本文の **`creationRamp`**（*"Delay between every operation creation in seconds."*、例 `15`）。**発行側で指定できる主たる制御** | [確] |
-| 失敗分の再実行 | `failedParentId` で失敗分だけ再スケジュールできる | [確] |
+| ⭐ **流量制御** | リクエスト本文の **`creationRamp`**（*"Delay between every operation creation in seconds."*、例 `15`）。**発行側で指定できる主たる制御**。⚠️ **go-c8y-cli のフラグ名は `--creationRampSec`**（`creationRamp` は API のボディフィールド名であってフラグ名ではない） | [確] |
+| 失敗分の再実行 | `failedParentId` で失敗分だけ再スケジュールできる。⚠️ **`groupId` とは排他**（*"`groupId` and `failedParentId` are mutually exclusive."*） | [確] |
 | システムオプション | `device-control/bulkoperation.creationramp` は実在するが**読み取り専用**で、意味（既定値か下限か）を述べた一次記述は無い | **[推 / 要 SV-19]** |
 
 > **[判] `creationRamp` を CI 側で必須パラメータ化してください。** 指定しないと、拠点数 × 装置数のオペレーションが一斉に生成され、Edge のスループット上限（§7.7）に直撃します。
+> **これは本書の判断であると同時に API の要求でもあります** [確]: *"**It is required to specify the delay between the creation of subsequent operations.**"*
+
+> ⚠️⚠️ **bulk operation は精密なスケジューラではありません** [確]:
+>
+> > *"Bulk operations are an asynchronous, **best-effort** mechanism … **not a precision scheduling tool**"*
+>
+> **§4.9 R-c（変更ウィンドウ内に収める）を bulk operation の `startDate` だけで担保しないでください。** ウィンドウ超過を検知する側（§4.10 のキルスイッチ）を必ず併設してください。
 
 ### 4.9 段階ロールアウト
 
@@ -888,8 +1056,8 @@ thin-edge (main device) ── supported operations に申告済みのものだ�
 |---|---|---|---|
 | **画像解析装置** | **Cumulocity**（thin-edge のハートビート） | `c8y_UnavailabilityAlarm` | **設定する（15 分）** |
 | **BOXゲートウェイ** | **Cumulocity**（同上） | `c8y_UnavailabilityAlarm` | **設定する（10 分）** |
-| **IP カメラ** | **thin-edge A の ONVIF 監視サービス** | `x_CameraDown` | **`responseInterval: 0`（無効化）** |
-| **画像センシングBOX** | **BOXアダプタ**（無通信タイムアウト） | `x_BoxSilent` | **`responseInterval: 0`（無効化）** |
+| **IP カメラ** | **thin-edge A の ONVIF 監視サービス** | `x_CameraDown` | **`responseInterval: 32767`（実質無効化）**。⚠️ **`0` は不可**（§5.4） |
+| **画像センシングBOX** | **BOXアダプタ**（無通信タイムアウト） | `x_BoxSilent` | **`responseInterval: 32767`（実質無効化）**。⚠️ **`0` は不可**（§5.4） |
 | **Cumulocity のマイクロサービス** | **Cumulocity**（自動生成） | `c8y_Application_Down` / `c8y_Application_Unhealthy` | — |
 | **Edge 自体** | **メタ監視**（Prometheus・§12.7） | Cumulocity の外 | — |
 
@@ -902,14 +1070,25 @@ thin-edge (main device) ── supported operations に申告済みのものだ�
 | 機能 | `responseInterval` を設定すると、指定時間内に通信が無い場合にアラームが自動生成される | [確] |
 | 生成されるアラーム | `c8y_UnavailabilityAlarm`（既定 MAJOR / *"No data received from the device within the required interval."*） | [確] |
 | **値域** | **`-32768`〜`32767`（分）。範囲外は境界に丸められる** | [確] |
-| **無効化** | **`responseInterval: 0`**（メンテナンスモード） | [確] |
+| **メンテナンスモード** | **`responseInterval` が `0` 以下**でメンテナンスモードに入る（`0` だけでなく負値も含む） | [確] |
 | 自動クリア | 通信再開時に Cumulocity が自動でクリア | [確] |
+| ⚠️⚠️ **メンテナンスモードの副作用** | **そのデバイスを `source` とする「すべての」アラームが抑止される。** `c8y_UnavailabilityAlarm` だけでなく `x_CameraDown` も EPL・スマートルールも発火しなくなる | [確] |
+
+> ⚠️⚠️ **メンテナンスモードは「可用性監視の無効化」ではなく「そのデバイスのアラーム全停止」です。** 公式に逐語で明記されています。
+>
+> > *"**Alarm suppression** — If the source device is in maintenance mode, **the alarm is not created and not reported to the Cumulocity event processing engine.**"*（Core OpenAPI `POST /alarm/alarms`）
+> >
+> > *"**While a device is being maintained, no alarms for that device are raised.**"*（[Monitoring and controlling devices](https://cumulocity.com/docs/device-management-application/monitoring-and-controlling-devices/)）
+>
+> **しかも POST は成功扱いで返り、レスポンスの `self` が `https://<TENANT_DOMAIN>/alarm/alarms/null` になるだけです。** 呼び出し側はエラーを受け取らないため、「アラームを送っているのに 1 件も登録されていない」ことに気づくのが極端に遅れます。**§14 に「メンテナンス中の child へ `x_CameraDown` を POST し、実際に登録されるか」の否定テストを必ず置いてください（CT-9b）。**
 
 ### 5.3 ⚠️⚠️ 落とし穴 — thin-edge は既定で全 child device に 60 分を設定する
 
 thin-edge.io の公式ドキュメントに逐語で [確]:
 
 > *"%%te%% main and child devices set their required interval during their first connection. Availability monitoring is enabled by default with a default required interval of 1 hour."*
+
+child device への送出はソースでも確認できます [確S]：`crates/extensions/c8y_mapper_ext/src/availability/actor.rs` は child device の新規登録時に `send_smartrest_set_required_availability_for_child_device` を呼び、**main と同じ `c8y.availability.interval` の値**を SmartREST **117** で送ります。
 
 **つまり何もしないと、代理登録した全カメラ・全 BOX に `c8y_RequiredAvailability = 60 分` が付きます。** カメラ・BOX は自分でハートビートを送らないため（既定のヘルス判定元はそのデバイス上の `tedge-agent` サービスで、代理登録した child には存在しない）、**接続から 1 時間後に全 child が一斉にアラームを上げると推測されます** [推]。
 
@@ -919,11 +1098,23 @@ thin-edge.io の公式ドキュメントに逐語で [確]:
 
 | # | 対処 | 内容 |
 |---|---|---|
-| **1** | **ゲートウェイの死活は thin-edge のハートビート機構を使う** | `c8y.availability.interval` を設定。**1 分未満または 0 を設定すると無効化される** [確] |
-| **2** | ⭐ **child device は登録時にメンテナンスモードへ落とす** | `c8y_RequiredAvailability = {"responseInterval": 0}` を twin で設定（§3.5 手順 6）**[要 TE-5: 実機で child への twin 反映を確認]** |
-| 3 | 代替案: `@health` を使う | child 登録メッセージの `@health` に監視サービスの topic id を指定すると、そのサービスが `up` の間だけハートビートが送られる [確]。**公式機構だが、アラーム型が `c8y_UnavailabilityAlarm` になり `x_CameraDown` 規約と食い違う**ため、**本書は 2 を採る** |
+| **1** | **ゲートウェイの死活は thin-edge のハートビート機構を使う** | `c8y.availability.interval` を設定。**1 分未満または 0 を設定すると無効化される** [確]。⚠️ **ただし §5.5 の注意（117 は既存値を上書きしない）を必ず読むこと** |
+| **2** | ⭐ **child device は `responseInterval` に十分長い正値を入れる** | `c8y_RequiredAvailability = {"responseInterval": 32767}`（上限値・約 22.7 日）を twin で設定（§3.5 手順 6）。**`0` にしてはいけない** — メンテナンスモードに入り `x_CameraDown` ごと抑止される（§5.2）**[要 TE-5: 実機で child への twin 反映を確認]** |
+| 3 | 代替案: `c8y.availability.enable false` | *"When disabled, the required availability interval and periodic heartbeat messages aren't sent to Cumulocity"* [確]。**child に 117 が一切飛ばなくなる**ので最も確実。ただし **main / child を分離できない全体スイッチ**で、main のハートビートも止まる。採る場合は main の `c8y_RequiredAvailability` を §13 の設定投入で明示的に入れること |
+| 4 | 代替案: `@health` を使う | child 登録メッセージの `@health` に監視サービスの topic id を指定すると、そのサービスが `up` の間だけハートビートが送られる [確]。**公式機構だが、アラーム型が `c8y_UnavailabilityAlarm` になり `x_CameraDown` 規約と食い違う**ため、**本書は 2 を採る** |
 
-> ⚠️ **設定箇所を Cumulocity 側と thin-edge 側で二重管理しないでください。** main device の `c8y_RequiredAvailability` は **thin-edge の `c8y.availability.interval` が唯一の情報源**とし、Cumulocity 側から手で書かないこと（§3.8）。書くと次回接続時に thin-edge の値で上書きされ、「なぜか設定が戻る」という切り分けの難しい事象になります。
+> ⚠️⚠️ **旧版（rev.1）は対処 2 を「メンテナンスモード（`responseInterval: 0`）へ落とす」としていましたが、これは誤りでした。**
+> メンテナンスモードは可用性監視だけでなく **そのデバイスを `source` とする全アラームを抑止**します（§5.2）。§5.6 で同じカメラに `x_CameraDown` を上げる設計と真正面から衝突し、**「死活監視を設計したのに死活アラームが 1 件も上がらない」**状態になります。
+
+> ⚠️ **対処 2 の残存リスク**: `responseInterval: 32767` は「無効化」ではなく「約 22.7 日で発報」です。カメラ・BOX が §5.6 要件 4（正常時も定期的に `x_CameraHealth` を送る）を守っていれば発報しませんが、**§5.9 の削減方針 2（正常時は送らない）を採ると 22.7 日後に全 child が一斉に `c8y_UnavailabilityAlarm` を上げます。** 方針 2 を採る場合は対処 3（`c8y.availability.enable false`）に切り替えてください。**[判] この組み合わせ制約を §5.9 の決定（TE-15）と同時に確定させること。**
+
+> ⚠️⚠️ **設定の「正」の向きに注意 — SmartREST 117 は既存値を上書きしません。** 旧版はここを逆に書いていました。
+>
+> > *"Set required availability (117) … **This will only set the value if it does not exist. Values entered, for example, through the UI, are not overwritten.**"*（[SmartREST static templates](https://cumulocity.com/docs/smartrest/mqtt-static-templates/)）
+> >
+> > *"This template can be sent in a fire-and-forget approach during device startup because **it doesn't override already existing required availability configuration**"*（[Fragment library](https://cumulocity.com/docs/device-integration/fragment-library/)）
+>
+> **帰結**: 「Cumulocity 側で手で書くと thin-edge の値に戻される」のではなく、**逆に Cumulocity 側に一度値が入ると thin-edge の `c8y.availability.interval` が二度と反映されなくなります**。実務上の影響は §5.5 を参照してください。
 
 ### 5.5 `responseInterval` の設計値
 
@@ -931,7 +1122,22 @@ thin-edge.io の公式ドキュメントに逐語で [確]:
 |---|---|---|---|
 | **画像解析装置** | **15 分** | thin-edge `c8y.availability.interval = 15m` | 死活計測が 1〜5 分間隔。WAN の瞬断・再接続で誤報しない余裕を取る。**過小だと回線瞬断のたびに拠点数ぶんのアラームが上がる** |
 | **BOXゲートウェイ** | **10 分** | thin-edge `c8y.availability.interval = 10m` | 同一サーバールーム内で WAN 断の影響を受けないため短くできる |
-| **IP カメラ / BOX** | **0（無効）** | プロビジョニングツール（twin） | 死活は `x_CameraDown` / `x_BoxSilent` に一元化 |
+| **IP カメラ / BOX** | **32767（実質無効）** | プロビジョニングツール（twin） | 死活は `x_CameraDown` / `x_BoxSilent` に一元化。**`0` は不可**（§5.2・§5.4） |
+
+> ⚠️⚠️ **この設計値は「初回接続より前」に入れないと反映されません。**
+> SmartREST 117 は既存値を上書きしませんが、**逆に言えば先に入っていた値が勝ちます**（§5.4）。thin-edge は初回接続時に 117 を送るため、順序によって結果が変わります。
+>
+> | 順序 | 結果 |
+> |---|---|
+> | ① Cumulocity 側に先に値を入れる → ② thin-edge 初回接続 | **① の値が残る**（117 は無視される）→ **狙いどおり** |
+> | ① thin-edge 初回接続（60 分が入る） → ② `tedge config set c8y.availability.interval 15m` | **60 分のまま。15 分は永久に反映されない** |
+>
+> **既に接続済みの装置に対しては `tedge config set` だけでは値が変わりません。** 次のいずれかで既存フラグメントを置き換えてください。
+>
+> - Cumulocity 側の MO を直接 PUT して `c8y_RequiredAvailability` を書き換える（**推奨**。§13 の設定投入に載せれば冪等・版管理できる）
+> - SmartREST `107` でフラグメントを削除してから 117 を再送させる
+>
+> **[判] 本書は「main device の `c8y_RequiredAvailability` は §13 の設定投入（Cumulocity 側）を正とする」に改めます。** thin-edge の `c8y.availability.interval` は「初回接続時の初期値」としてのみ機能し、運用中の変更手段にはなりません。**[要 TE-5b] 移行手順（既存拠点の値の一括置換）を runbook 化してください。**
 
 > ⚠️ **[要 SV-26] 上記は提案値です。** 確定には「許容できる検知遅れ」と「実測された WAN 瞬断の頻度・長さ」が要ります。**検証環境で瞬断を再現し、パイロット拠点で観測期間を定めて実測（例: 2 週間）してから固定してください。** 合格条件は「その期間中の誤報件数が合意した許容件数以下であること」です。
 
@@ -969,7 +1175,7 @@ thin-edge.io の公式ドキュメントに逐語で [確]:
 
 | 発生シナリオ | 件数 | 抑止策 |
 |---|---|---|
-| **初回接続の 1 時間後**（§5.3 の落とし穴） | 全 child（数百〜数千） | **§5.4 の対処 2**（登録時に `responseInterval: 0`） |
+| **初回接続の 1 時間後**（§5.3 の落とし穴） | 全 child（数百〜数千） | **§5.4 の対処 2**（登録時に `responseInterval: 32767`）。**初回接続より前に入れること**（§5.5） |
 | **WAN 瞬断**（`responseInterval` が過小） | 拠点数ぶんの main device | **§5.5 の値の実測確定** |
 | **Edge 停止 → 復旧** | 全 main device | Cumulocity 側の自動クリアで解消。ただし通知が復旧時刻に集中する → §8.4 |
 | **GW 停止**（案 α のみ） | 全拠点の BOX | 案 β では発生しない → 付録 A |
@@ -977,17 +1183,37 @@ thin-edge.io の公式ドキュメントに逐語で [確]:
 
 > ⚠️ **アラームは `CLEARED` にならない限り削除されません** [確]。ストームが 1 回起きると、手動クリアするまで Operational Store に残り続けます。**「起きてから消す」ではなく「起こさない」設計が必要です。**
 
+**Cumulocity 標準の重複排除は、ここでは効きません** [確]:
+
+> *"**Alarm de-duplication** — If an **ACTIVE or ACKNOWLEDGED** alarm with the same source and type exists, no new alarm is created. Instead, the existing alarm is updated by incrementing the `count` property; the `time` property is also updated. **Any other changes are ignored**, and the audit log is not created. Alarms with status CLEARED are not de-duplicated."*（Core OpenAPI `POST /alarm/alarms`）
+
+- 重複排除の単位は **(`source`, `type`)** です。上表のストームは **`source` が全 child ぶん異なる**ため 1 件に畳まれません
+- **`CLEARED` を挟むフラッピングも畳まれません**。§5.6 要件 1（ヒステリシス）は必須のままです
+- ⚠️ **重複排除は ACTIVE だけでなく ACKNOWLEDGED でも働きます。** 運用者がアラームを「確認済み」にした後も、同じ (`source`, `type`) の新規アラームは立たず `count` が増えるだけです。**「確認済みにしたら次の異常が見えなくなる」わけではありませんが、新着として通知されない**点は運用手順（§10.6）で織り込んでください
+
 ### 5.9 死活計測の送信量とスケールへの影響
 
 **死活計測は Edge の受信量の支配項になります。**
 
 ```
 [連携仕様] §3.5 の試算 : 50 拠点 × 300 台 ÷ 60 秒 ≒ 250 msg/s（死活のみ）
-Edge の目安            : 約 100 tps / CPU コア  [要・伝聞値]
-Wide ベンチマーク      : 8 CPU / 16GB で 1,200 接続クライアント  [確]
+Edge 比較表の目安      : 約 100 tps / CPU コア                      [確]
+Narrow ベンチマーク    : 8 CPU スレッド / 16GB で 25,000 measurement/s [確]
+Wide ベンチマーク      : 8 CPU スレッド / 16GB で 1,200 接続クライアント [確]
 ```
 
-> ⚠️⚠️ **Wide シナリオが本構成に直撃します。** 「1 拠点あたり数百台 × N 拠点」の child device 設計に対し、8 CPU で 1,200 クライアントが上限です（§7.7）。
+> ⚠️⚠️ **公式ドキュメント自身が非整合です。** 比較表の「約 100 tps / CPU コア」（[Edge introduction](https://cumulocity.com/docs/2026/edge/edge-introduction/) の `Vertical scalability` 行に *"Yes, limited to appr. 100 tps per CPU core"* と逐語）と、ベンチマークの Narrow 値（8 スレッドで 25,000 measurement/s ≒ 3,100/スレッド）は **30 倍以上乖離**します。ベンチマークページには *"for illustrative purposes only"* の Caution があり、単位も「CPU **threads**」です。
+>
+> **どちらも公式なので、どちらか一方をサイジングの根拠にしないでください。** [判断記録] D17 の「PoC 実測を正とする」という指示がそのまま有効で、§14 SV-14（負荷試験）の必要性はむしろ強まります。
+
+> ⚠️ **旧版（rev.1）は「Wide シナリオが本構成に直撃する」としていましたが、これは誤りでした。**
+> Wide の律速は **同時接続 MQTT クライアント数**です。
+>
+> > *"These end-to-end test scenarios drive a number of **MQTT clients** … The clients are connecting to the MQTT service and sending measurements using the JSON via MQTT protocol."*（[Edge benchmarks](https://cumulocity.com/docs/2026/edge/benchmarks/)）
+>
+> **代理登録された child device は独自の MQTT 接続を持ちません**（拠点あたり thin-edge の 1 本に集約される）。したがって接続クライアント数は **child 台数ではなく拠点数のオーダー**であり、1,200 という上限には遠く及びません。**律速は Narrow 側（メッセージ毎秒）で評価してください。**
+>
+> **ただし child device 台数は別軸の制約として残ります** — MO 総数、デバイス課金、inventory クエリ性能（§11.9 の 2000 件閾値）。**[要 SV-14b] これらを台数軸で別途評価すること。**
 
 **[判] 送信量の削減方針（[要 TE-15] いずれを採るか未決）**:
 
@@ -1263,8 +1489,8 @@ te/device/main/service/onvif-monitor/status/health    ← 監視サービスの�
 
 | データ種別 | retain | QoS | 誤ると何が起きるか |
 |---|---|---|---|
-| 計測 | **禁止** | 0 or 1 | retain すると再接続のたびに同じ計測が再送される |
-| イベント | **禁止** | 1 | 同上 |
+| 計測 | **禁止**（[判]・下記） | 0 or 1 | retain すると再接続のたびに同じ計測が再送される |
+| イベント | **禁止**（[判]・下記） | 1 | 同上 |
 | **アラーム** | **必須** | **2** | **retain しないとアラームが上がらない／クリアできない** |
 | **アラームのクリア** | **必須**（空メッセージ） | **2** | **クリアされずアラームが残り続ける** |
 | ツイン | 必須 | — | 反映されない |
@@ -1272,17 +1498,34 @@ te/device/main/service/onvif-monitor/status/health    ← 監視サービスの�
 
 > ⚠️ **アラームの retain 要件は、実装者が最も間違えやすい点です**（[担当範囲] §7.4）。**IF 仕様書に太字で書き、疎通試験の必須項目にしてください。**
 
+> **確度の内訳**: アラームの `retain` 必須と `QOS > 1` は公式に逐語で明記されています [確]（*"…with **QOS > 1** to ensure guaranteed processing"* — [Raise an alarm](https://thin-edge.github.io/thin-edge.io/start/raise-alarm/)）。
+> 一方、**計測・イベントの retain「禁止」を明文で述べた一次情報は見つかりませんでした**（thin-edge の MQTT API・設定ファイル・FAQ を全文検索）。retain の意味論から導かれる **[判]** として扱ってください。規約としては維持すべきですが、「公式が禁止している」とは書かないでください。
+
 ### 6.7 ⚠️ サイズ制約 — 16KB の壁
 
 | 経路 | 上限 | 超えたときの挙動 | 確度 |
 |---|---|---|---|
-| **ローカル MQTT（計測）** | `c8y.mapper.mqtt.max_payload_size` = **16,184 バイト** | **拒否される（破棄される）。気づけない** | [確S] |
+| **ローカル MQTT（計測）** | `c8y.mapper.mqtt.max_payload_size` = **16,184 バイト** | **拒否される（破棄される）。ただし `te/errors` に出る** | **[確]** |
 | **ローカル MQTT（イベント）** | 同上 | **HTTP に自動で切り替わる** | [確] |
+| **ローカル MQTT（アラーム）** | 同上 | **拒否される** | **[確S]** |
 | **REST（添付バイナリ）** | 既定 **50MiB**（チャンク 5MiB） | エラー | [確] |
+
+**16,184 バイトは Cumulocity 側の制限です** [確]:
+
+> *"For all Core MQTT connections to the platform, the maximum accepted payload size is **16184 bytes (16KiB)**, which includes both message header and body."*
+
+thin-edge 側もこれに合わせています（`tedge_config.rs` の `C8Y_MQTT_PAYLOAD_LIMIT = 16184`）。rev.1 は [確S]（ソースのみ）としていましたが、**公式ドキュメントに逐語根拠があるため [確] に格上げ**しました。
+
+> ⚠️⚠️ **判定は「変換後」のサイズです** [確]: *"Any message with a larger payload (**after transformation**) will be rejected."*
+> thin-edge JSON → Cumulocity JSON の変換で**ペイロードは数倍に膨らみます**（例: `{"temperature":25}` → `{"temperature":{"temperature":{"value":25.0}}}`）。**ローカルでの文字列長チェックだけでは不十分**です（S-d を参照）。
+
+> ⚠️ **アラームにも 16KB 制限が適用されます** [確S]（2.0.1 の `flows.rs` の `alarms_flow()` にも `limit-payload-size` ステップがある）。rev.1 の表はアラーム行を欠いていました。
 
 > ⚠️⚠️ **16KB 制約と 50MiB 制約は別レイヤの話です。** 16KB は **MQTT トピック投入経路にのみ適用**され、REST（`tedge upload c8y` / c8y-proxy 直叩き）経路には及びません。混同しないでください。
 
-> ⚠️ **イベントが 16KB を超えると HTTP 経路に切り替わり、ストア&フォワードの対象外になります** [確]。**網断中はそのイベントが失われます。**
+> ⚠️ **イベントが 16KB を超えると HTTP 経路に切り替わり、ストア&フォワードの対象外になります** [確S]。**網断中はそのイベントが失われます。**（「HTTP はストア&フォワード対象外」を明文で述べた docs は無く、根拠は `events.rs` のコメントです。）
+
+> **拒否は検知できます。** 既定フローの `measurements.toml` に `[errors.mqtt] topic = "te/errors"` が定義されており、**サイズ超過で捨てられたメッセージは `te/errors` に出ます**。rev.1 の「気づけない」は誤りでした。**[判] `te/errors` の購読を監視要件に入れてください**（§12.7）。
 
 **[判] 規約**:
 
@@ -1291,7 +1534,7 @@ te/device/main/service/onvif-monitor/status/health    ← 監視サービスの�
 | **S-a** | **1 イベントのペイロードは 16KB 未満とする** |
 | **S-b** | **`boundingBoxes` の件数上限を定める**（例: 32 件）。混雑シーンで検知数が増えると容易に超える |
 | **S-c** | **超えた場合の挙動を規約で決める**（切り詰めるか、別イベントに分けるか） |
-| **S-d** | **発行側でサイズを検証してから publish する**（超過を検知できるようにする） |
+| **S-d** | **発行側でサイズを検証してから publish する。ただし「変換後」のサイズで判定すること。** ローカルの thin-edge JSON の文字列長では過小評価になる。**併せて `te/errors` を購読し、実際に拒否されたら検知できるようにする**（二重の防御） |
 
 ### 6.8 添付（スナップショット）の扱い
 
@@ -1302,13 +1545,23 @@ te/device/main/service/onvif-monitor/status/health    ← 監視サービスの�
 | **保存先** | Cumulocity のイベント添付（**Operational Store と同一 MongoDB・同一保持期間で消える**） |
 | **経路** | c8y-proxy 経由の REST。**MQTT ではない** |
 | **推奨手段** | **`tedge upload c8y`**（イベント作成 + 添付 + イベント ID 取得を 1 コマンドで行う）[確] |
-| **制約 1** | **既存イベントへの後付け添付はできない**（新規イベント作成とセット） |
+| **制約 1** | ⚠️ **これは `tedge upload c8y` の制約であって、プラットフォームの制約ではありません。** `tedge upload c8y` は必ず新規イベントを作りますが、Cumulocity 側には **`POST /event/events/{id}/binaries`**（*"**Attach a file to a specific event** — Upload a file (binary) as an attachment of a specific event by a given ID."*）があり、**c8y-proxy 経由で既存イベントへの後付け添付は可能**です [確] |
 | **制約 2** | **1 イベント 1 バイナリ**（2 件目は HTTP 409） |
 | ⚠️ **制約 3** | **網断耐性なし**。HTTP 経路は**ストア&フォワードの対象外**。**発行側のローカルスプールが必須** |
 | ⚠️ **制約 4** | c8y-proxy は *"requests to the proxy API are occasionally spuriously rejected with a `401 Not Authorized` status code"* [確] → **リトライを実装規約に入れる** |
 | **将来** | オブジェクトストレージ本体 + サムネイル添付へ移行（構成図の配置の要点） |
 
-> ⚠️ **[要 SV-06] リテンションが添付バイナリに及ぶかは公式に記載がありません。** 検証環境で短期リテンションを設定して観測してください。**及ばない場合、添付だけが MongoDB に残り続けます。**
+> ⭐ **[判] 制約 1 が外れたことで、網断耐性の設計が 1 段良くなります。**
+> rev.1 は「イベントと添付は不可分」という前提から、**添付が失敗するとイベントごと失われる**設計になっていました。後付け添付が可能である以上、次の分離が取れます。
+>
+> 1. **イベント本体は MQTT で送る**（ストア&フォワードが効く。網断中もキューに載る）
+> 2. **スナップショットはローカルにスプールし、復旧後に `POST /event/events/{id}/binaries` で後付けする**
+>
+> これにより「網断中に検知イベントそのものが消える」ことがなくなります。**[要 SV-42] この方式を採るか（＝発行側にイベント ID とファイルの対応を保持させるか）を [担当範囲] §6.6 と決めてください。**
+
+> **[確K] リテンションは添付バイナリにも及びます。** Cumulocity Tech Community に *"Yes, that is one of the main reasons why binaries should be attached to events…"*（[Event file binary attachment retention rules](https://community.cumulocity.com/t/event-file-binary-attachment-retention-rules/14387)）との回答があります。rev.1 は SV-06 を「公式に記載がない」としていましたが、**上表の「保存先」欄が既に「同一保持期間で消える」と断定しており、文書内で矛盾していました。**
+>
+> ⚠️ ただし **`files` リポジトリ（ソフトウェアリポジトリ等）にはリテンションが及びません** [確]（*"Retention rules do not apply to files stored in the files repository."*）。**イベント添付とファイルリポジトリを混同しないでください**（§7.4）。
 
 > **[判] 添付を出すのは画像解析パイプラインのみです。** BOX はスナップショットを出しません（**[要 TE-9] N2 で確認**）。
 
@@ -1319,9 +1572,25 @@ te/device/main/service/onvif-monitor/status/health    ← 監視サービスの�
 | **TM-a** | **`time` は「事象の発生時刻」。受信時刻ではない** | 再送時も同一値であることが重複判定の前提 |
 | **TM-b** | **ISO 8601（タイムゾーン付き）または unix 秒** | [確] |
 | **TM-c** | ⚠️ **全ノードで NTP を必須にする**（Edge ホスト・画像解析装置・外部Gateway・Keycloak） | **時刻ずれは「TLS の有効期限判定」「JWT の `exp`/`iat` 検証」「イベントと映像クリップの突合」を同時に壊し、エラーから原因に辿り着けなくなる**（IF-P03 / P-0-3） |
-| **TM-d** | **`time` が無い場合は Cumulocity が受信時刻を付ける** | 網断復旧後の一括再送で**全イベントが復旧時刻になる**。**発行側が必ず `time` を入れること** |
+| **TM-d** | **`time` が無い場合は thin-edge が「ローカル受信時刻」を付ける** | 補完された時刻は**発行側の意図した事象時刻とは限らない**。**発行側が必ず `time` を入れること** |
 
-> ⚠️ **TM-d は網断時に効きます。** `time` を省略すると、3 時間の網断から復旧した瞬間に「3 時間分のイベントが全部いま起きた」ことになり、時系列分析も映像突合も壊れます。**IF 仕様書で `time` を必須項目にしてください。**
+> ⚠️⚠️ **rev.1 の TM-d は主体を取り違えていました。** 時刻を補うのは Cumulocity ではなく **thin-edge** で、しかも**クラウドへの送信時ではなくローカルでの受信時**です [確]:
+>
+> > *"When thin-edge.io receives a measurement, it will **add a timestamp to it before any further processing**."* / *"when not provided, thin-edge.io uses the current system time"*（[Thin Edge JSON](https://thin-edge.github.io/thin-edge.io/understand/thin-edge-json/)）
+> >
+> > *"The default value for the time fragment will be the timestamp in utc time that is **added by the tedge-mapper-c8y**"*（[Raise an alarm](https://thin-edge.github.io/thin-edge.io/start/raise-alarm/)）
+>
+> 既定フローの第 1 ステップが `{ builtin = "add-timestamp", … }` であることからも確認できます。
+>
+> **したがって「網断復旧後の一括再送で全イベントが復旧時刻になる」という失敗モードは、本構成（thin-edge 経由）では起きません。** 時刻はローカルで確定するため、キューに滞留しても値は変わりません。
+
+> **それでも `time` を必須にする理由は変わりません**:
+>
+> 1. **thin-edge が付けるのは「thin-edge が受け取った時刻」**であり、カメラ・BOX が事象を検知した時刻ではない。BOXアダプタの遅延・バッチ送信ぶんだけずれる
+> 2. TM-a のとおり **再送時に同一値であること**が重複判定の前提になる（`time` が無いと再送のたびに値が変わりうる）
+> 3. **thin-edge を経由しない経路**（REST 直叩き・将来の別経路）では Cumulocity 側の受信時刻になる
+>
+> **IF 仕様書で `time` を必須項目にしてください。** ただし理由は「Cumulocity が復旧時刻を付けるから」ではなく上記 1〜3 です。**理由が誤ったままだと、レビューで規約ごと否定されます。**
 
 ### 6.10 データフロー（まとめ図）
 
@@ -1381,11 +1650,22 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 
 **Cumulocity の既定と制約** [確]:
 
-| 事実 | 帰結 |
-|---|---|
-| 新規 Edge には**既定ルール（全履歴データ 60 日）**が先に存在する | 「あるべき集合」を宣言的に適用する必要がある |
-| 上限は 10 年 | — |
-| **`files` リポジトリには適用されない** | ソフトウェアリポジトリは別途削除運用が要る（§4.4 論点 2） |
+| 事実 | 帰結 | 確度 |
+|---|---|---|
+| **既定では全履歴データが 60 日で削除される** — *"By default, all historical data is deleted after 60 days (**configurable in the system settings by the platform administrator**)"* | 90 日にするには明示的な設定が要る。**設定漏れ＝60 日で消える** | [確] |
+| ⚠️⚠️ **その 60 日が「削除できるリテンションルールのオブジェクト」として存在するかは未確認** | **§13.3.6 の手順③（旧ルールを個別に削除）が空振りする可能性がある** | **[要 SV-43]** |
+| 上限は 10 年 | — | [確] |
+| **`files` リポジトリには適用されない** | ソフトウェアリポジトリは別途削除運用が要る（§4.4 論点 2） | [確] |
+| **`ALARM` には `fragmentType` による絞り込みが効かない** | アラームはフラグメント単位で保持期間を変えられない | [確] |
+
+> ⚠️⚠️ **[要 SV-43] リテンション設計の前提が 1 つ未確認のまま残っています。**
+> 「60 日」という既定値は公式に明記されていますが、**それが `GET /retention/retentionRules` で列挙・削除できるオブジェクトなのか、それともシステム設定側の値なのかを述べた一次記述が見つかりません**（docs / OpenAPI / Tech Community の 3 経路で探索）。
+>
+> **もしシステム設定側の値なら**、90 日のルールを追加しても**システム設定の 60 日が先に効いて 90 日目のデータが存在しない**可能性があります。**W1 の最優先で実機確認してください。** 確認方法:
+>
+> 1. `c8y retentionrules list` で既定ルールが列挙されるか
+> 2. されない場合、`GET /tenant/system/options` で保持日数に相当するキーを探す
+> 3. 検証環境で短い保持日数を設定し、**実際にどちらが効くか**を観測する
 
 #### ⚠️ 適用順序 — 「全削除 → 再作成」は危険
 
@@ -1419,16 +1699,22 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 | `x_CameraDown` | thin-edge の監視サービス | ✅ |
 | `x_BoxSilent` | BOXアダプタ | ✅ |
 | `x_ModelUpdateFailed` | thin-edge の sm-plugin（再適用成功時） | ✅ |
-| **`x_BoxParseError`** | **[要決定]** | ⚠️ デッドレター処理後に手動クリアか、時限自動クリアか |
+| **`x_BoxParseError`** | **[要決定]** | ⚠️ デッドレター処理後に手動クリアか、時限自動クリアか。**⚠️ 時限自動クリアに使える組み込みスマートルールは存在しません**（§8.2）。EPL で実装する前提で決めること |
 | **`x_Alarm_<種別>`** | **[要決定]** | ⚠️ 案件側が決定 |
+
+> ⚠️ **`ACKNOWLEDGED` も削除されません。** 削除されるのは `CLEARED` のみです（*"Alarms are only removed if they have a status of CLEARED."*）。運用者が「確認済み」にしただけでは Operational Store から消えないため、**運用手順で「確認したらクリアまで行う」ことを明示してください**（§10.6）。
+
+> ⚠️ **リテンションルールの `fragmentType` は `ALARM` には効きません。** アラームの削除条件は `type` と status のみで絞られます。**フラグメント単位で保持期間を変えたい場合、アラームでは実現できません**（§7.2 の設計に反映済みか確認すること）。
 
 ### 7.4 添付バイナリ
 
 | 項目 | 状態 |
 |---|---|
-| リテンションが添付に及ぶか | **[要 SV-06]** 公式に記載なし。**検証環境で短期リテンションを設定して観測** |
-| 及ばない場合の帰結 | **添付だけが MongoDB に残り続ける** → 独自の削除運用が必要 |
+| リテンションが**イベント添付**に及ぶか | **及ぶ** [確K]（§6.8）。Tech Community に *"Yes, that is one of the main reasons why binaries should be attached to events…"*。**SV-06 は解消** |
+| リテンションが **`files` リポジトリ**に及ぶか | ⚠️ **及ばない** [確]（*"Retention rules do not apply to files stored in the files repository."*）。**ソフトウェアリポジトリ（AI モデル）は自動削除されない** → §4.4 論点 2 の世代管理が必須 |
 | サイズ | 既定 50MiB（チャンク 5MiB） |
+
+> ⚠️ **「添付」と「ファイルリポジトリ」で挙動が正反対です。** スナップショット（イベント添付）は放っておけば消えますが、**AI モデル（ファイルリポジトリ）は放っておくと永久に残ります**。§4.4 論点 2（[要 TE-20] 旧世代の削除運用）は、この非対称ゆえに必須の運用項目です。
 
 ### 7.5 オフロード（長期保存）
 
@@ -1453,7 +1739,13 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 
 ### 7.6 容量サイジング
 
-> ⚠️⚠️ **`storageClassName` と MongoDB 容量は install 後に変更できません** [確]。**§12 のセットアップより前に確定が必要です。**
+> ⚠️ **install 後に変更できないのは `storageClassName` だけです** [確]。**MongoDB 容量は「増やす」ことができます**:
+>
+> > `spec.mongodb.resources.requests.storage`: *"If not provided, it defaults to 75GB. **Once Edge is installed, you can only increase this value, but cannot reduce.**"*
+> > `spec.storageClassName`: *"This value is used only during the Edge installation and **can't be changed for existing installations**."*
+> > — [Edge custom resource definition](https://cumulocity.com/docs/2026/edge/edge-custom-resource-definition/)
+>
+> **rev.1 は MongoDB 容量も変更不可としていたため、TE-22（サイジング手法の確立）を不必要にクリティカルパスへ載せていました。** 初期値は余裕を持たせつつ、**「足りなければ増やせる／減らせない」という非対称を前提に、やや小さめから始めて増設する**運用も選べます。**縮小はできない**点だけ守ってください。
 
 **[判] 算出手順**（**[要 TE-22]** 手法の確立が必要）:
 
@@ -1488,18 +1780,22 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 
 | 指標 | 値 | 確度 |
 |---|---|---|
-| 一般的な目安 | **約 100 tps / CPU コア** | [確]（**ベンダー資料からの伝聞値として扱う**） |
-| Narrow（10 クライアント）8 CPU / 16GB | 25,000 measurement/s | [確] |
-| Narrow 16 CPU / 32GB | 47,500 measurement/s | [確] |
-| **Wide（各 1 measurement/s）8 CPU / 16GB** | **1,200 接続クライアント** | [確] |
-| **Wide 16 CPU / 32GB** | **2,200 接続クライアント** | [確] |
+| 比較表の目安 | **約 100 tps / CPU コア** | [確]（[Edge introduction](https://cumulocity.com/docs/2026/edge/edge-introduction/) の `Vertical scalability` 行に *"Yes, limited to appr. 100 tps per CPU core"*） |
+| Narrow（10 クライアント）8 CPU スレッド / 16GB | 25,000 measurement/s | [確] |
+| Narrow 16 CPU スレッド / 32GB | 47,500 measurement/s | [確] |
+| **Wide（各 1 measurement/s）8 CPU スレッド / 16GB** | **1,200 接続クライアント** | [確] |
+| **Wide 16 CPU スレッド / 32GB** | **2,200 接続クライアント** | [確] |
 | ハードウェア最小要件 | CPU 8 コア / RAM 16GB / Disk 150GB。**MongoDB は AVX 命令 + x86-64-v3 以降が必須** | [確] |
 
-> ⚠️⚠️ **Wide シナリオが本構成に直撃します。** 「1 拠点あたり数百台 × N 拠点」の child device 設計に対し、8 CPU で 1,200 クライアントが上限です。
+> ⚠️⚠️ **公式の 2 つの数値は 30 倍以上食い違っています。** 比較表の「100 tps / CPU コア」に対し、Narrow ベンチマークは 8 スレッドで 25,000 measurement/s（≒ 3,100 / スレッド）です。**両方とも公式なので、どちらか一方をサイジングの根拠にしないでください。** ベンチマークページには *"for illustrative purposes only"* の Caution があり、単位も「CPU **threads**」（コアではない）です。[判断記録] D17 の「PoC 実測を正とする」がそのまま有効です。
+
+> ⚠️ **rev.1 の「Wide シナリオが本構成に直撃する」は誤りでした。** Wide の律速は **同時接続 MQTT クライアント数**です（*"These end-to-end test scenarios drive a number of **MQTT clients** …"*）。
 >
-> **ただし「接続クライアント」の定義に注意してください。** 本構成で MQTT 接続を張るのは **main device（thin-edge インスタンス）だけ**で、child device（カメラ・BOX）は接続を持ちません。**接続数は「拠点数 × 2」（案 β）になります。** 一方、**measurement のレートは child 台数に比例**するため、Narrow 側の指標も併せて見る必要があります。
+> 本構成で MQTT 接続を張るのは **main device（thin-edge インスタンス）だけ**で、child device（カメラ・BOX）は独自の接続を持ちません。**接続数は「拠点数 × 2」（案 β）のオーダー**であり、1,200 という上限には遠く及びません。**律速は Narrow 側（メッセージ毎秒）で評価してください。**
 >
-> **[要 SV-14] 全拠点合算の負荷試験は必須です**（§14 CT-28）。**「接続数」と「レート」の両面で実測してください。**
+> **ただし child device 台数は別軸の制約として残ります**（**[要 SV-14b]**）: ①MO 総数 ②デバイス課金 ③inventory クエリ性能（§11.9 の 2000 件閾値）。**「接続数の問題ではない」ことと「台数が無制限」は別です。**
+>
+> **[要 SV-14] 全拠点合算の負荷試験は必須です**（§14 CT-28）。**「レート」「MO 総数」の両面で実測してください。**
 
 > ⚠️ **案 α を採ると、外部Gateway の thin-edge が 1 プロセスで全拠点分のイベントを処理します**（**[要 TE-13]** child device 数の上限はドキュメントに記載なし）→ 付録 A。
 
@@ -1509,7 +1805,20 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 
 ### 8.1 処理系の選択肢と使い分け
 
-**Cumulocity Edge には 3 つの処理系があり、いずれも 2026 Edge に `Included` です** [確]。
+**Cumulocity Edge には 3 つの処理系があります。** 2026 Edge の機能比較表で `Included` と明記されているのは **`Streaming Analytics`** の 1 行です [確]（EPL Apps と Analytics Builder はその配下の機能で、スマートルールは Cockpit の機能）。
+
+> ⚠️⚠️ **[要 SV-45] Edge が同梱する Apama-ctrl のバリアントが未確認です。これは本章の前提を丸ごと左右します。**
+>
+> Cumulocity には複数の Apama-ctrl バリアントがあり、**どれが入るかで使える処理系が変わります** [確]（[Streaming Analytics introduction](https://cumulocity.com/docs/streaming-analytics/introduction-analytics/)）:
+>
+> | バリアント | 使えないもの |
+> |---|---|
+> | `Apama-ctrl-starter` | *"The EPL Apps page is not available"* |
+> | `Apama-ctrl-smartrules` | *"The Analytics Builder and EPL Apps pages are not available"* |
+>
+> **Edge 2026 のドキュメント全ページを `apama` / `epl` / `cep` で検索しても、どのバリアントが同梱されるかの記述はありません。**
+>
+> **本章の RL-b・RU-2〜RU-5 はすべて EPL 前提です。** EPL Apps が使えないバリアントだった場合、**§8 の設計の過半が成立しません**。§12.4（インストールと初期確認）で最優先に確認し、使えない場合の代替（スマートルール + マイクロサービス、または Analytics Builder）を先に決めてください。
 
 | 処理系 | 実体 | 表現力 | 保守のしやすさ | **[判] 本構成での用途** |
 |---|---|---|---|---|
@@ -1533,7 +1842,7 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 | # | ルール | 処理系 | 入力 | 出力 | 保守主体 |
 |---|---|---|---|---|---|
 | **RU-1** | **検知イベント → アラーム昇格** | スマートルール（単純な場合）／ EPL（時間窓を使う場合） | `x_Detection_<種別>`（`confidence` 等） | `x_Alarm_<種別>` | **案件側**（雛形は基盤） |
-| **RU-2** | **アラームの自動クリア** | スマートルール | 各アラーム型 | CLEARED | **基盤**（§8.3） |
+| **RU-2** | **アラームの自動クリア** | ⚠️ **EPL**（時限クリアに使える組み込みスマートルールは存在しない・§8.3） | 各アラーム型 | CLEARED | **基盤**（§8.3） |
 | **RU-3** | ⚠️ **リプレイ抑止ガード** | EPL | 全イベント | 抑止 | **基盤**（§8.4・**雛形に必須で組み込む**） |
 | **RU-4** | **BOX 再送の重複排除の補助** | EPL | `x_Detection_*` の `eventUuid` | 重複の除外／検知 | ⚠️ **一次責務は BOXアダプタ**（§8.5） |
 | **RU-5** | **拠点単位のロールアップアラーム** | EPL | `x_CameraDown` / `x_BoxSilent` の多発 | 拠点集約アラーム | 基盤（**案 α では必須**・付録 A） |
@@ -1547,12 +1856,18 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 
 | アラーム型 | クリア主体 | 実装 |
 |---|---|---|
-| `c8y_UnavailabilityAlarm` | **Cumulocity（自動）** | 設定不要 |
+| `c8y_UnavailabilityAlarm` | **Cumulocity（自動）** | `c8y_RequiredAvailability` の設定が前提（§5.2）。設定していないデバイスでは発報もクリアも起きない |
 | `x_CameraDown` | thin-edge の監視サービス | 空 retained メッセージ（§6.6） |
 | `x_BoxSilent` | BOXアダプタ | 同上 |
 | `x_ModelUpdateFailed` | thin-edge の sm-plugin | 同上 |
-| **`x_BoxParseError`** | **[要決定]** | デッドレター処理後の手動クリアか、**スマートルールによる時限自動クリア**か |
-| **`x_Alarm_<種別>`** | **[要決定]** | 案件側が決定。**時限自動クリア（例: 24 時間）を既定にすることを推奨** |
+| **`x_BoxParseError`** | **[要決定]** | デッドレター処理後の手動クリアか、**EPL による時限自動クリア**か |
+| **`x_Alarm_<種別>`** | **[要決定]** | 案件側が決定。**時限自動クリア（例: 24 時間）を既定にすることを推奨。実装は EPL** |
+
+> ⚠️⚠️ **「スマートルールによる時限自動クリア」は存在しません。** rev.1 は §8.2 RU-2 と本節でこれを前提にしていましたが、**組み込みのスマートルールテンプレート全 11 種に、時間経過でアラームをクリアするものはありません**（[Smart rules collection](https://cumulocity.com/docs/cockpit/smart-rules-collection/) を全件確認）。
+>
+> クリアを行うテンプレートは閾値系・ジオフェンス系だけで、しかも「**自分が作ったアラームを条件反転で戻す**」動作です（*"Measurement outside of yellow and red range: If there is an active alarm of given type for the object, clear the CRITICAL and/or MINOR alarm."*）。時間経過は条件になりません。
+>
+> **[判] 時限自動クリアは EPL（RL-b）で実装してください。** §8.2 の RU-2 も EPL 側へ移してあります。これは §8.1 の使い分け規約（時間窓が要るものは EPL）とも整合します。
 
 > **[判] 「クリア条件が決まっていないアラーム型は投入しない」を規約にしてください。** 型を先に作ってクリアを後回しにすると、本番でアラーム一覧が使い物にならなくなります。
 
@@ -1580,12 +1895,20 @@ WAN 断（例: 30 分）
 
 > ⚠️ **ガード 1 は「古いイベントを捨てる」ことではありません。** イベント自体は Operational Store に残し（後から突合できる）、**アラーム昇格と通知だけを抑止**します。捨ててしまうと欠落と区別がつかなくなります。
 
+> ⚠️⚠️ **[要 SV-44] そもそも「一括再送される」という前提自体が未検証です。**
+> thin-edge の公式ドキュメントに**ストア&フォワード／オフラインバッファの容量規定が見つかりません**（MQTT API・設定ファイル・overview・FAQ を全文検索）。加えて、thin-edge が生成する mosquitto ブリッジ設定には **`max_queued_messages` の指定がありません**（`crates/core/tedge/src/bridge/config.rs`）。
+>
+> **mosquitto の既定は 1000 件**なので、これを超えた分は「あとで再送される」のではなく **その場で捨てられる（欠落する）**可能性があります。
+>
+> **つまり本節が想定する失敗モード（大量再送）と、逆向きの失敗モード（大量欠落）の両方がありえます。** §14 CT-15 は「一括再送で通知が集中しないこと」だけでなく、**「30 分の網断で送信したメッセージ数と、復旧後に Cumulocity に到達した数が一致すること」**を必ず含めてください。欠落が起きるなら、リプレイ抑止ガードより先に**キュー容量のチューニング**が必要になります。
+
 ### 8.5 重複排除の責務
 
 | 事実 | 帰結 |
 |---|---|
-| **Cumulocity 側に重複排除機能はありません** | 責務を一元化する必要がある |
-| **thin-edge にも重複排除機能はありません** | 同上 |
+| **Cumulocity のアラーム de-duplication は「本構成が必要とする重複排除」には使えません** | 対象がアラームのみ・判定キーが (`source`, `type`) のみ・`CLEARED` は対象外（下記）。**検知イベントの重複には効かない** |
+| **イベントには重複排除の仕組みがありません** | 責務を一元化する必要がある |
+| **thin-edge にも（イベントの）重複排除機能はありません** | 同上。⚠️ ただしアラームは retained 上書きにより「最新のみ保持」になる |
 | BOX は「バッファ + 再送機能あり想定」（構成図） | **再送による重複が必ず発生する** |
 
 **[判] 一次責務は BOXアダプタです**（[連携仕様] §4.5）。
@@ -1597,7 +1920,14 @@ WAN 断（例: 30 分）
 | **DD-c** | **Cumulocity 側（EPL）は「検知」に留め、除外の責務は持たない** | 二重に排除すると、どちらが落としたか分からなくなる |
 | **DD-d** | ⚠️ **[要 TE-9]** BOX の送信仕様（プロトコル・シーケンス ID の有無・再送間隔・バッファ容量）が未確認 | **重複判定キーと保持ウィンドウ（仮 72h）が確定できない** |
 
-> ⚠️ **Cumulocity サーバー側の de-duplicate は「ACTIVE 中の同一 `source` + `type`」を対象とし、severity は条件に含まれません**（[連携仕様] §3.5・§4.5）。これは**アラームにのみ働く仕組み**で、イベントの重複排除には使えません。**§6.5 の thin-edge 側の「型 + severity」規則とは別レイヤの話です**（§9.4）。
+> ⚠️ **Cumulocity サーバー側の de-duplicate の正確な仕様** [確] — Core OpenAPI `POST /alarm/alarms`:
+>
+> > *"**Alarm de-duplication** — If an **ACTIVE or ACKNOWLEDGED** alarm with the same source and type exists, no new alarm is created. Instead, the existing alarm is updated by incrementing the `count` property; the `time` property is also updated. **Any other changes are ignored**, and the audit log is not created. **Alarms with status CLEARED are not de-duplicated.**"*
+>
+> - ⚠️ **対象は ACTIVE だけでなく ACKNOWLEDGED も含みます。** rev.1 は「ACTIVE 中の」としていましたが不正確でした。**運用者が「確認済み」にした後も、同じ (`source`, `type`) の新規アラームは立たず `count` が増えるだけ**です
+> - 判定キーは (`source`, `type`) のみで **severity は含まれません**（§9.4 で詳述）
+> - **アラームにのみ働く仕組み**で、イベントの重複排除には使えません（§6.5 の thin-edge 側「型 + severity」規則とは別レイヤ）
+> - **`CLEARED` を挟むフラッピングは畳まれません** → §5.6 要件 1（ヒステリシス）は必須
 
 ### 8.6 保守主体の分界
 
@@ -1638,10 +1968,19 @@ WAN 断（例: 30 分）
 | 項目 | 内容 | 確度 |
 |---|---|---|
 | **場所** | テナントオプション。カテゴリ `alarm.type.mapping` / キー `<ALARM_TYPE>` | [確] |
-| **値の形式** | **`<SEVERITY>\|<TEXT>`**（パイプ区切り） | [確] |
+| **キーの解釈** | ⭐ **前方一致（`<type-prefix>*`）**。完全一致ではない（§9.2） | [確] |
+| **値の形式** | **`<SEVERITY>\|<TEXT>`**（パイプ区切り）。片方が空なら上書きしない | [確] |
 | **効果** | アラーム型ごとに **severity とテキストを上書き**する | [確] |
 | **抑止** | severity に **`NONE`** を指定するとそのアラームを抑止できる | [確] |
 | **適用タイミング** | アラーム生成時 | [確] |
+
+> ⚠️ **出典に注意 — `alarm.type.mapping` は docs サイトのどのページにも記載がありません。**
+> 逐語根拠は **Core OpenAPI の `POST /tenant/options` の "Default option categories" 表**にのみ存在します:
+>
+> > *"The severity and text are specified as `<ALARM_SEVERITY>|<ALARM_TEXT>`. If either part is empty, the value will not be overridden. **If the severity is NONE, the alarm will be suppressed.** Example: `"CRITICAL|temperature too high"`"*
+> > — `https://cumulocity.com/api/core/dist/c8y-oas.yml`
+>
+> **docs サイトだけを検索した後任が「根拠なし」と誤判定しやすい箇所です。** §16 にこの URL を明記してあります。なお **前方一致の挙動だけは [Alarm mapping](https://cumulocity.com/docs/standard-tenant/alarm-mapping/) 側に記載**があり、2 ページを合わせて読む必要があります。
 
 > **なぜ必要か**: デバイス側が送る severity は実装者に委ねられます。`alarm.type.mapping` を置くことで、**「型ごとの severity を Cumulocity 側で一元的に決められる」**ようになり、デバイス実装の差が運用に漏れなくなります。
 
@@ -1660,7 +1999,24 @@ WAN 断（例: 30 分）
 | `c8y_Application_Down` | **[判] 変更しない**（既定のまま） | Cumulocity の自動生成。**プラットフォーム管理の領域** | プラットフォーム管理 |
 | `c8y_Application_Unhealthy` | 同上 | 同上 | 同上 |
 
-> ⚠️ **`x_Alarm_<種別>` は `<種別>` ごとに個別のキーになります。** 種別が案件から追加されるたびにマッピングの追加が必要です。**種別の追加手順を運用手順に含めてください。**
+> ⭐⭐ **アラーム型は「前方一致」で解釈されます** [確]:
+>
+> > *"The alarm type provided as an alarm mapping is **interpreted as alarm type prefix: `"<type-prefix>*"`**. If you create, for example, an alarm mapping to address alarms of type "crit-alarm", the mapping is effective for any type of alarm that starts with this value, for example, "crit-alarm-1", "crit-alarm-2", or "crit-alarm-xyz"."*
+> > — [Alarm mapping](https://cumulocity.com/docs/standard-tenant/alarm-mapping/)
+>
+> **rev.1 は「`<種別>` ごとに個別のキーが要る／種別追加のたびにマッピング追加が必要」としていましたが、誤りでした。**
+>
+> **良い面**: `x_Alarm_` という 1 キーで全種別に効きます。**種別追加のたびの運用手順は不要**になります。
+>
+> ⚠️⚠️ **危険な面**: 短いキーを置くと、**意図しない型まで severity が上書きされたり抑止されたりします**。特に `NONE`（抑止）と組み合わせると **「アラームが静かに消える」** 最悪ケースになります。例えば `x_` というキーを置くと、`x_` で始まる全アラームが巻き添えになります。
+>
+> **[判] 型名規約に次を追加してください**（§6.4 に反映・§2.8 の CI 検査 CK-6 として機械検査すること）:
+>
+> | # | 規約 |
+> |---|---|
+> | **AM-a** | **どのアラーム型も、他のマッピングキーの前方一致に該当してはならない**（例: `x_CameraDown` と `x_Camera` を同時にキーとして持たない） |
+> | **AM-b** | **`NONE` を指定するキーは、必ず完全な型名を書く。** プレフィックスとしての `NONE` 指定を禁止する |
+> | **AM-c** | **`x_Alarm_` のような総称キーを使う場合、その配下の型がすべて同じ severity でよいことを確認する。** 個別に変えたい型があれば、より長い（＝より具体的な）キーを追加する |
 
 ### 9.3 severity 設計の考え方
 
@@ -1687,14 +2043,22 @@ WAN 断（例: 30 分）
 | 層 | 規則 | 確度 |
 |---|---|---|
 | **thin-edge のローカル MQTT** | **「型 + severity」で一意**。*"Every alarm is uniquely identified by its type and severity. That is, for a given alarm type, alarms of varying severities are treated as independent alarms and hence, must be acted upon separately."* | [確] |
-| **Cumulocity サーバー側の de-duplicate** | **ACTIVE 中の同一 `source` + `type`** が対象。**severity は条件に含まれない** | [連携仕様] §3.5・§4.5 |
+| **Cumulocity サーバー側の de-duplicate** | **ACTIVE または ACKNOWLEDGED の同一 `source` + `type`** が対象。**severity は条件に含まれない** | **[確]** |
 
 **帰結**:
 
 - thin-edge 側で severity を変えて再 publish すると、**thin-edge から見れば別のアラーム**になります。**旧 severity のアラームを別途クリアしないと 2 つ残ります**
-- 一方 Cumulocity 側では同一 `source` + `type` として扱われる可能性があります
+- **Cumulocity 側では、severity 変更は「無視」されます**（下記）
 
-> ⚠️ **[要] この 2 つの規則の相互作用（severity を変えて再送した場合に Cumulocity 側で何が起きるか）は未検証です。** 型規約（§6.4）を確定する前に、検証環境で実際に確認してください（§14 CT-13）。
+> ⭐ **[確] rev.1 が「未検証」としていた相互作用には、公式の答えがあります。** Core OpenAPI `POST /alarm/alarms`:
+>
+> > *"If an ACTIVE or ACKNOWLEDGED alarm with the same source and type exists, no new alarm is created. Instead, the existing alarm is updated by incrementing the `count` property; the `time` property is also updated. **Any other changes are ignored**, and the audit log is not created."*
+>
+> **「Any other changes are ignored」＝ severity を変えて再送しても、Cumulocity 側のアラームの severity は変わりません。** `count` と `time` だけが更新されます。
+>
+> 傍証として、SmartREST の **305（Update severity of existing alarm）** と **306（Clear existing alarm）** はいずれも **type のみでアラームを識別**します（`306,c8y_TemperatureAlarm`）。severity を変えたければ、新規 POST ではなく 305 のような明示的な更新経路を使う必要があります。
+>
+> **したがって「severity を上げて再送すれば昇格する」は成立しません。** §14 CT-13 は「観測して確かめる」ではなく「**予測どおりに無視されることを 1 ケースで確認する**」に縮小できます。**型規約（§6.4）の確定を CT-13 の完了まで待つ必要はありません。**
 
 **[判] 暫定規約**: **アラームの severity を運用中に変えない設計にします。** severity を変えたい場合は、`alarm.type.mapping` で型ごとに固定し、デバイス側は常に同じ severity を送ります。**「軽度 → 重度への昇格」が必要な場合は、別の型のアラームとして扱ってください。**
 
@@ -1703,10 +2067,12 @@ WAN 断（例: 30 分）
 | ケース | `NONE` を使うか | 代替 |
 |---|---|---|
 | 検証中に大量発生するアラームを一時的に止めたい | ⚠️ **使わない** | 原因を直す。`NONE` にすると「直したつもりで実は抑止していただけ」になる |
-| 特定のデバイスだけ止めたい | ❌ **使えない**（型単位の設定なのでデバイス指定できない） | メンテナンスモード（`responseInterval: 0`・§5.4） |
+| 特定のデバイスだけ止めたい | ❌ **使えない**（型単位の設定なのでデバイス指定できない） | メンテナンスモード（`responseInterval` を **0 以下**）。⚠️ **ただしそのデバイスの全アラームが止まります**（§5.2）。「1 つの型だけ止める」用途には使えません |
 | 製品が自動生成するアラームで本構成では不要なもの | ✅ **候補** | 現時点で該当なし |
 
 > **[判] `NONE` の使用は「恒久的に不要と判断した型」に限定し、使う場合は理由をコメントとして構成コードに残してください。** 抑止は「アラームが出ない」ことを意味し、切り分け時に極めて追いにくい設定です。
+
+> ⚠️⚠️ **`NONE` は前方一致で効きます。** §9.2 の AM-b のとおり、`NONE` を指定するキーには**必ず完全な型名**を書いてください。プレフィックスとして指定すると、**まだ存在しない将来の型まで巻き添えで抑止されます**。これは「後から型を追加したら、なぜかアラームが出ない」という最も追いにくい事故になります。
 
 ### 9.6 クリア条件の定義（必須項目）
 
@@ -1758,13 +2124,29 @@ WAN 断（例: 30 分）
 |---|---|---|
 | `context` **(必須)** | `mo` / `tenant` | **`mo`**（`tenant` はテナント全体で拠点分離ができない） |
 | `source` | managed object のグローバル ID | **拠点グループの MO ID**（`context: mo` のとき必須） |
-| `subscription` **(必須)** | トピック名。**パターン `^[a-zA-Z0-9]+$`** | **拠点コード**（§1.4・§2.5） |
+| `subscription` **(必須)** | トピック名。**`pattern: '^[a-zA-Z0-9]+$'` / `minLength: 1` / `maxLength` の定義なし** | **拠点コード**（§1.4・§2.5） |
 | `subscriptionFilter.apis` | `alarms` / **`alarmsWithChildren`** / `events` / **`eventsWithChildren`** / `managedobjects` / `measurements` / `operations` / `*` | **`alarmsWithChildren`**（案件アプリ向け）／必要に応じて `eventsWithChildren` |
 | `subscriptionFilter.typeFilter` | 型の完全一致、または `or` の OData 式 | **§6.4 の型で絞る**（例: `'x_Alarm_Intrusion' or 'c8y_UnavailabilityAlarm'`） |
 | `fragmentsToCopy` | 指定した独自フラグメント**のみ**を含める | ⚠️ **生体情報・個人情報に関わるフラグメントを案件アプリへ渡さないために使う** |
 | `nonPersistent` | boolean | **`false`（既定・永続）**。⚠️ `subscription` 名が同じでも `nonPersistent` が違えば**別トピック**になる |
 
-**`alarmsWithChildren` は `source.id` の managed object と、その配下の全 descendant managed object のアラームを購読します** [確]。
+**`alarmsWithChildren` は `source.id` の managed object と、その配下の全 descendant managed object のアラームを購読します** [確]:
+
+> *"The `alarmsWithChildren` and `eventsWithChildren` APIs subscribe to alarms and events respectively from the managed object identified by the `source.id` field, and **all of its descendant managed objects**."*
+
+> ⚠️⚠️ **「descendant」がどの関係を辿るのかは、公式のどこにも書かれていません** — 本書の前提 2 が [要] である理由です。
+>
+> 公式の記述は一貫して関係を特定しない語だけで、**`childAssets` / `childDevices` / `childAdditions` のどれを辿るかを述べた一次情報は存在しません**。OpenAPI（latest / 2026 / 2025）・Edge OpenAPI・Tech Community 全文検索・WebSearch・domain-model の 7 経路で確認済みです。
+>
+> **決定的な対比材料**: 同じ Cumulocity の Alarm/Event **REST** API は明示的に区別しています —
+>
+> ```yaml
+> withSourceAssets:    'alarms for related source assets will also be included'
+> withSourceDevices:   'alarms for related source devices will also be included'
+> withSourceAdditions: ...
+> ```
+>
+> **区別する語彙が製品内に存在するのに、Notification 2.0 の説明ではあえて使われていません。** 「全部辿る」「片方だけ」のどちらの可能性も残ります。**実機確認以外に確定手段はありません**（§14 CT-4）。§1.1 の記述もこれに合わせて [推] に格下げしてあります。
 
 #### **[判] 本構成のサブスクリプション定義**
 
@@ -1830,9 +2212,23 @@ WAN 断（例: 30 分）
 |---|---|---|
 | 1 | **発行されるトークンはトピックにスコープされる** [確]（JWT の `topic` クレーム） | プロキシが渡すサブスクリプション名を絞れば、案件アプリは他拠点のトピックを読めない |
 | 2 | **`ROLE_NOTIFICATION_2_ADMIN` を持つのはプロキシのサービスユーザーだけ** | §11.4 R-09 |
-| 3 | **`expiresInMinutes` の既定は 1440 分（24 時間）** [確] | **案件アプリ側にトークン再取得のロジックが必要**（**[要 SV-36]** 案件側との合意事項） |
-| 4 | `shared: true` で共有コンシューマを作れる [確] | 案件アプリを冗長化する場合に使う |
+| 3 | **`expiresInMinutes` の既定は 1440 分（24 時間）** [確]。⚠️ **上限値の定義は無い**（OpenAPI に `maximum` / `minimum` の指定なし） | **案件アプリ側にトークン再取得のロジックが必要**（**[要 SV-36]** 案件側との合意事項）。**[判] プロキシ側で既定より短い値を明示指定してください**（下記） |
+| 4 | `shared: true` は**冗長化ではなく負荷分散**（下記） | 誤用すると通知が取りこぼされる |
 | 5 | ⚠️ **実装主体が未確定**（TB-3） | **決めないと通知経路全体が止まる** |
+| 6 | **WebSocket の接続仕様** [確]: パス `/notification2/consumer/`、クエリは `token`（必須）と `consumer`（任意）のみ。ポートは 443 / 80 / `cumulocity:8111` | §12.5 の疎通対象ポートの確定（SV-05）に必要 |
+| 7 | ⚠️ **アイドル 5 分でサーバ側から切断される。未 ack が 1000 件に達すると配信が止まる** [確] | **案件アプリに再接続と ack の実装が必須**（SV-36 の合意事項に含めること） |
+
+> ⚠️ **トークン失効は完全な歯止めにはなりません** [確]:
+>
+> > *"Tokens only allow a consumer to connect to the Messaging Service. **If a token expires while its consumer is connected, the consumer is not automatically logged out or disconnected.**"*
+>
+> **接続中のコンシューマは失効後も受信し続けます。** RBAC バイパス対策としてプロキシを置いた以上、`expiresInMinutes` の短縮だけに頼らず、**不正なコンシューマを止める手段（`POST /notification2/unsubscribe`）を runbook に用意してください**（§10.5）。
+
+> ⚠️⚠️ **`shared: true` は「冗長化」ではありません** [確]:
+>
+> > *"Shared consumer tokens allow **parallelization of the consumer client workload**"* / *"each consumer client receives a **non-overlapping subset (share)** of the notifications"* / *"Messages received by a shared consumer client **must** be acknowledged on the same WebSocket connection."*
+>
+> **冗長化のつもりで 2 台に `shared: true` のトークンを配ると、通知が 2 台に分配されます**（両方が全件受け取るわけではありません）。**片方が落ちればその分は処理されません。** 冗長化が目的なら、Active/Standby にして**同時に接続しない**構成にしてください。
 
 > ⚠️ **このプロキシは §10.3 D-e と同じ思想です。Notification 2.0 だけロールを直接渡す例外を作らないでください。**
 
@@ -1842,17 +2238,42 @@ WAN 断（例: 30 分）
 |---|---|
 | サブスクライバは**最初の WebSocket 接続時に生成**される | 事前作成は不要 |
 | **一度作られたサブスクライバは、WebSocket が切断されても削除されない** | ⚠️ 停止した案件アプリの分のメッセージが**溜まり続ける** |
-| Messaging Service は、消費されるか TTL に達するか**明示的に unsubscribe されるまで**メッセージを永続化する | ⚠️ **ディスク逼迫の経路**。単一 Edge に全拠点が集約されている本構成では影響が全拠点に及ぶ |
-| 解除は `POST /notification2/unsubscribe?token=<token>` | 当該トピック・サブスクライバのトークンを作ってから呼ぶ |
+| Messaging Service は、消費されるか TTL に達するか**明示的に unsubscribe されるまで**メッセージを永続化する | ⚠️⚠️ **ディスク逼迫ではなく「データ投入の停止」を招く**（下記） |
+| **Hard quota**: メッセージバックログ **25 MiB** / TTL **36 時間** | 「無限に溜まる」わけではないが、**25 MiB に達した時点で書き込み側が壊れる** |
+| 解除は `POST /notification2/unsubscribe?token=<token>` | ⚠️ **DELETE ではなく POST**。当該トピック・サブスクライバのトークンを作ってから呼ぶ |
+
+> ⚠️⚠️ **バックログ満杯の帰結は「ディスクを食う」ではなく「アラーム・イベントが登録できなくなる」です** [確]:
+>
+> > *"If the backlog for a Notifications 2.0 topic has reached its quota limit, **any API request to the Cumulocity platform that would be published onto that topic will receive HTTP response code 500.** … Note that for requests using the PERSISTENT processing mode, the Cumulocity operational store will still be updated. This can lead to duplicated entries…"*
+> > — Core OpenAPI §Notification 2.0 Service Quotas
+>
+> **拠点 A の案件アプリが停止して ack を止めると、25 MiB に達した時点でその拠点のアラーム・イベントの POST が 500 で失敗するようになります。** 「通知が届かない」だけでなく **「データが記録されなくなる」** という、まったく重さの違う障害です。rev.1 はこれを容量問題として扱っていました。
+>
+> **これは §10.3 の RBAC バイパスと並ぶ、Notification 2.0 由来の第 2 の構造的リスクです。** 案件アプリの停止が基盤のデータ収集を壊すため、**案件アプリの稼働状況を基盤側が監視する必要があります**（下表 2）。
 
 **[判] 運用設計に必ず入れること**:
 
 | # | 対応 |
 |---|---|
 | 1 | **廃止した案件アプリ・試験用サブスクライバの unsubscribe 手順**を runbook 化する（[担当範囲] RB-10） |
-| 2 | **サブスクライバ数とバックログ量をメタ監視の対象にする**（**[要 SV-33]** Prometheus エンドポイントで取れるか未確認。**取れない場合は棚卸し運用が唯一の歯止め**） |
+| 2 | ⭐ **サブスクライバ数とバックログ量を監視する。公式 UI に専用画面があります** [確] |
 | 3 | **拠点撤収時に該当サブスクリプションを解除する**（§3.9） |
-| 4 | **§7.6 の容量サイジングにバックログ分を含める** |
+| 4 | **§7.6 の容量サイジングにバックログ分（最大 25 MiB × トピック数）を含める** |
+
+> ⭐ **[確] SV-33 は解消しました。監視手段は公式に用意されています。**
+> `Administration > Monitoring > Messaging Service` に次の列があり、**公式が危険域まで示しています**:
+>
+> | 指標 | 危険域（公式） |
+> |---|---|
+> | Subscribers | > 5 |
+> | Message backlog | > 20 MB |
+> | Used backlog | > 80% |
+> | Unacknowledged messages | > 1000 |
+> | Last acknowledged | >= 1 day |
+>
+> 同画面から **UI 経由の unsubscribe も可能**です。出典は §16 に既載の [Monitoring](https://cumulocity.com/docs/standard-tenant/monitoring/) です。
+>
+> **rev.1 の「取れない場合は棚卸し運用が唯一の歯止め」という前提は誤りでした。** この画面の値を §12.7 のメタ監視に取り込み、**Used backlog 80% でアラートを上げてください**（25 MiB 到達＝データ投入停止の直前です）。
 
 ### 10.6 人への通知経路
 
@@ -1909,32 +2330,58 @@ WAN 断（例: 30 分）
 
 | ID | ロール名 | 対象主体 | 含める権限 |
 |---|---|---|---|
-| **R-01** | **基盤運用者** | S-1 | Tenant Manager 相当 + Application management ADMIN + Retention rules ADMIN + CEP management ADMIN + Device control ADMIN + **Own user management READ** |
-| **R-02** | **拠点オペレーター** | S-2 | Alarms ADMIN / Events READ / Inventory READ / Device control READ + **Own user management READ** |
-| **R-03** | **業務閲覧者** | S-3 | Alarms READ / Events READ / Inventory READ + **Own user management READ** + **Cockpit アプリアクセス** |
-| **R-10** 〈本書で追加〉 | **保守（AI モデル）** | S-4 | **ソフトウェアリポジトリ書込**（`ROLE_INVENTORY_ADMIN` + files 権限）+ Device control ADMIN + Device Management アプリアクセス + Own user management READ |
+| **R-01** | **基盤運用者** | S-1 | Tenant Manager 相当 + Application management ADMIN + Retention rules ADMIN + CEP management ADMIN + Device control ADMIN + **Option management ADMIN**（`ROLE_OPTION_MANAGEMENT_ADMIN`・§11.8）+ **Own user management READ** |
+| **R-02** 〈rev.2 で改訂〉 | **拠点オペレーター** | S-2 | **Own user management READ + Device Management アプリアクセスのみ。**<br>**データ系（Alarms / Events / Inventory / Measurements）はグローバルに付与しない** → R-04a（Inventory ロール）で拠点別に付与 |
+| **R-03** 〈rev.2 で改訂〉 | **業務閲覧者** | S-3 | **Own user management READ + Cockpit アプリアクセスのみ。**<br>**データ系はグローバルに付与しない** → R-04b で拠点別に付与 |
+| **R-10** 〈本書で追加〉 | **保守（AI モデル）** | S-4 | **ソフトウェアリポジトリ書込**（`ROLE_INVENTORY_ADMIN`）+ Device control ADMIN + Device Management アプリアクセス + Own user management READ。⚠️ **「files 権限」という権限カテゴリは存在しません**（公式の権限カテゴリ 21 種に無し）。**[要 SV-46]** ソフトウェアバイナリの書込に追加ロールが要るかを実機確認すること |
+
+> ⚠️⚠️⚠️ **rev.1 の R-02 / R-03 は、拠点分離を丸ごと無効化していました。**
+>
+> §11.3 は「Inventory ロールが拠点分離の実装点です」と宣言していますが、rev.1 は R-02 に `Alarms ADMIN` / `Events READ` / `Inventory READ`、R-03 に `Alarms READ` / `Events READ` / `Inventory READ` を **グローバルロール**として与えていました。**グローバルにデータ系ロールを持つと、Inventory ロールによる絞り込みが効かなくなります** [確]:
+>
+> > *"The role ROLE_ALARM_READ is not required, but if a user has this role, **all the alarms on the tenant are returned**. If a user has access to alarms through inventory roles, only those alarms are returned."*
+> > — Core OpenAPI `getAlarmCollectionResource`
+>
+> > *"In a Role Based Access Control (RBAC) approach **you must use the inventory roles in order to have the correct level of separation. Apart from some global permissions (like "own user management") customer users will not be assigned any roles.**"*
+> > — Core OpenAPI §Access rights and permissions
+>
+> **§10.3 で Notification 2.0 の RBAC バイパスを厳密に潰しているのに、REST 側にそれより広い穴が最初から開いていました。** §11.10 の否定テスト CT-5（拠点 A の Manager が拠点 B のアラームを取得できないこと）は、rev.1 のロール定義では**必ず失敗します**。
+>
+> **[判] 原則: 顧客ユーザーに付与してよいグローバル権限は「Own user management READ」と「アプリケーションアクセス」だけです。** データに触る権限はすべて Inventory ロール経由にしてください。
 
 > ⚠️⚠️ **「Own user management」の READ が無いとログインできません。** SSO のアクセスマッピングで割り当てる**全ロールに必ず含めてください**。
 
 > ⚠️ **API ロール名に `ROLE_INVENTORY_UPDATE` は存在しません** [確]。OAS に出現するのは `ROLE_INVENTORY_ADMIN` / `_CREATE` / `_READ` のみです。**UI の権限レベル（READ/CREATE/UPDATE/ADMIN）と API ロール名は 1:1 対応しない**ため、投入スクリプトでハマります。**実際の `ROLE_*` 名は投入前に `GET /user/roles` で確認してください。**
 
-> ⚠️ **⭐ Cloud Remote Access のロールは、どのグローバルロールにも含めません**（§4.7 手段 4）。
+> ⚠️ **⭐ Cloud Remote Access のロール（`ROLE_REMOTE_ACCESS_ADMIN`）は、どのグローバルロールにも含めません**（§4.7 手段 4）。**既定ではどのグループ・ユーザーにも割り当てられていません**ので、「付けない」を維持するだけで足ります。§13.7 AS-4 でこのロール名を検査してください。
 
 ### 11.3 Inventory ロール定義と割当
 
 **Inventory ロールが拠点分離の実装点です。**
 
+**rev.2 で R-02 / R-03 からデータ系のグローバル権限を外したため、ここが唯一のデータアクセス経路になります**（§11.2）。
+
 | ID | ロール名 | 権限 | 割当先 |
 |---|---|---|---|
-| **R-04a** | **拠点Manager** | Alarms ALL / Events READ / Inventory CHANGE / Measurements READ | 拠点オペレーター（S-2）× 担当拠点グループ |
+| **R-04a** | **拠点Manager** | Alarms ALL / Events READ / **Inventory ALL** / Measurements READ | 拠点オペレーター（S-2）× 担当拠点グループ |
 | **R-04b** | **拠点Reader** | Alarms READ / Events READ / Inventory READ / Measurements READ | 業務閲覧者（S-3）× 担当拠点グループ |
+
+> ⚠️ **`CHANGE` は `READ` を含みません** [確]: *"CHANGE - to modify objects (**does not include READ permission**)"* / *"ALL - to read AND modify objects"*。
+> rev.1 は R-04a を `Inventory CHANGE` としていましたが、**グローバルの `Inventory READ` を外した rev.2 では、これだと拠点 Manager がデバイス一覧を開けなくなります。** `Inventory ALL` に改めました。
 
 | # | 規約 | 理由 |
 |---|---|---|
-| **IR-a** | **拠点グループに割り当てる。デバイス個別に割り当てない** | 親グループ → サブグループ → デバイスへ継承される [確] |
+| **IR-a** | **拠点グループに割り当てる。デバイス個別に割り当てない** | *"Inventory roles are inherited from groups to all their direct and indirect subgroups, **and to the devices in these groups**."* [確] |
 | **IR-b** | ⚠️ **手動割当は SSO の `inventoryMappings` に次回ログインで上書きされる** [確] | **割当は必ず `inventoryMappings` で行う**（§11.6） |
 | **IR-c** | **投入は `c8y api` で `/user/inventoryroles` を直接叩く** | go-c8y-cli にトップレベルの `inventoryroles` サブコマンドが存在しない |
-| **IR-d** | **冪等化は 409 黙殺**（[投入ガイド] パターン E） | 再実行しても重複しない |
+| **IR-d** | **冪等化は 409 黙殺**（[投入ガイド] パターン E） | `POST /user/inventoryroles` は **409 "Duplicate" を返す** [確] ので、このパターンが有効。⚠️ **グループ作成（G-01）とは異なる**ので混同しないこと（§13.3.3） |
+
+> ⚠️⚠️ **[要 SV-47] 継承が「デバイス配下の子デバイス」まで届くかは公式に書かれていません。**
+> 公式が保証するのは **「グループ → サブグループ → それらのグループに属するデバイス」** までです。**カメラ・BOX は `childAssets` ではなく `childDevices` 経由で main device にぶら下がる**ため（§1.3）、**Inventory ロールが到達するかは未確認**です。
+>
+> **これは §10.2 の `alarmsWithChildren` と構造的に同一の疑問です。** 通知側だけ確認して安心すると、REST 側で拠点分離が破れます。**§14 CT-4 の実機確認で、通知と Inventory ロールを同じ階層構成で同時に検証してください。**
+>
+> **もし届かない場合の影響**: 拠点 Manager がカメラ個別のアラーム・インベントリを見られなくなり、§11.3 の設計が成立しません。代替は「カメラも `childAssets` で拠点グループに直接ぶら下げる」（§1.3 の階層設計の変更）になります。
 
 > ⚠️ **Inventory ロールは Notification 2.0 には効きません**（§10.3）。**「Inventory ロールで拠点分離できている」と考えると、通知経路で穴が空きます。**
 
@@ -1947,14 +2394,18 @@ WAN 断（例: 30 分）
 | **R-05** | VM2 アセット用 | S-6 | 最小限の READ | ⚠️ **原則としてエンドユーザー OIDC トークンを使う（D-e）。サービスユーザーはサーバサイド常駐が必要な場合のみ** |
 | **R-06a** | **運用知識基盤（読取）** | S-8 | 拠点横断 READ（Alarms / Events / Measurements / Inventory） | **分析処理は常時こちらで稼働させる** |
 | **R-06b** | **運用知識基盤（書込）** | S-9 | `ROLE_DEVICE_CONTROL_ADMIN` + `ROLE_INVENTORY_ADMIN` | ⚠️ **承認を伴う経路からのみ実行。§4.10 G-2 で拠点権限は一時付与** |
-| **R-08** | **証明書アップロード / CA 操作** | S-11 | `ROLE_TENANT_ADMIN` または `ROLE_TENANT_MANAGEMENT_ADMIN` | ⚠️ **SSO ユーザーでは実行不可** [確]。§3.4 P-b |
+| **R-08** | **証明書アップロード / CA 操作** | S-11 | `ROLE_TENANT_ADMIN` または `ROLE_TENANT_MANAGEMENT_ADMIN`（**かつ現テナントであること**） | ⚠️ **`tedge cert upload` が Basic 認証しか使わないため**ローカルユーザーが必要（§3.4 P-b）。**Cumulocity API 側の制約ではありません** — OpenAPI は両エンドポイントとも `security` に `SSO` を列挙しています |
 | **R-09** | **トークン発行プロキシ** | S-7 | ⚠️ **`ROLE_NOTIFICATION_2_ADMIN` を持つ唯一の主体** | §10.4。**他の誰にも付与しない** |
 | **R-11** 〈本書で追加〉 | **オフロードバッチ** | S-10 | 拠点横断 READ | §7.5 |
 | **R-12** 〈本書で追加〉 | **クリップ保存サービス** | S-14 | Alarms READ + 通知購読用トークンの受領 | §10.2 NS-2 |
 
 > **[判] R-06 を 2 つに分ける理由**: 単一アカウントだと**分析処理のバグが本番デバイスの設定を壊せる状態**になります。実装コストはユーザーを 1 つ増やすだけです。
 
-> ⚠️ **サービスアカウントの復旧手段は「削除 → 同名で再作成」です**（§12.8）。**ユーザー ID が変わるため、ロール・Inventory ロール・アプリケーションアクセスの再割当が必要**になります。**投入スクリプトが冪等なら、再実行がそのまま復旧手段になります。**
+> ⚠️ **サービスアカウントの復旧手段は「削除 → 同名で再作成」です**（§12.8）。**ロール・Inventory ロール・アプリケーションアクセスの再割当が必要**になります（ユーザーを削除すると割当も消えるため）。**投入スクリプトが冪等なら、再実行がそのまま復旧手段になります。**
+>
+> **[確] ユーザー ID は変わりません。** Cumulocity のユーザー ID は**ユーザー名そのもの**です（OpenAPI の example: `self: 'https://<TENANT_DOMAIN>/user/{tenantId}/users/jdoe'` / `id: jdoe` / `userName: jdoe`）。rev.1 は「ID が変わるため再割当が必要」としていましたが、理由が誤りでした。
+>
+> **したがって CI 側で同期が必要なのは ID ではなくパスワードです。** 再作成時に新しいパスワードが発行されるため、**CI シークレットストアの更新を復旧手順に必ず含めてください**（[担当範囲] RB-11）。ID を参照している設定は書き換え不要です。
 
 ### 11.5 break-glass と管理者アカウント
 
@@ -1991,20 +2442,49 @@ WAN 断（例: 30 分）
 | ⭐ `onNewUser.dynamicMapping.inventoryMappings[]` | **拠点 Inventory ロールの割当 ＝ 拠点分離の実装点** |
 | `sessionConfiguration` | セッション |
 
-> ⚠️ **リクエストボディのスキーマでは `id` が `readOnly` にオーバーライドされます。** エクスポート JSON から `id` を必ず除去してください [確]。
+> ⚠️⚠️ **`id` の扱いは POST と PUT で正反対です** [確]。rev.1 は「必ず除去」としていましたが、PUT では逆に必須です。
+>
+> | 操作 | スキーマ | `id` |
+> |---|---|---|
+> | `POST /tenant/loginOptions` | `allOf: [authConfig, {properties: {id: {readOnly: true}}}]` | **除去する** |
+> | `PUT /tenant/loginOptions/{typeOrId}` | `allOf: [authConfig, {required: [id]}]` | **必須**（example にも `id: 924997e5-…`） |
+>
+> **[判] 冪等化手順を次に改めます**（[投入ガイド] パターン B の「PUT 先行」とは順序が逆になります）:
+>
+> 1. `GET /tenant/loginOptions` で既存の `id` を取得
+> 2. 見つかれば **`id` を載せて PUT**
+> 3. 見つからなければ **`id` を除いて POST**
 
 #### ⚠️ 必須ガード
 
 | # | ガード | 内容 |
 |---|---|---|
-| **1** | ログインモードで SSO を選ぶと**ログイン画面から Basic Auth / OAI-Secure の選択肢が消える**。`management` テナントはローカル admin を維持 | [確] |
-| **2** | **`edge` テナントにも break-glass（R-07）を残す。** ガード 1 は `management` しか守らない。⚠️ **他人のローカルユーザーのパスワードは管理者でも変更できない**（§12.8）ため、**「作っておく」だけでなく有効性を定期確認する** | [確] |
+| **1** | ログインモードで SSO を選ぶと**ログイン画面から Basic Auth / OAI-Secure の選択肢が消える**（*"Single sign-on redirect - … If selected, will remove Basic Auth and OAI-Secure login options."*）。⚠️ **`management` テナントの保護は無条件ではありません**: 公式が述べるのは *"**If external communication to the Management tenant has been blocked**, then … the authentication method is automatically set to 'Basic authentication'"* だけです。**この条件が成立するかを §12.3 で確認してください** | [確] |
+| **1b** | **切替のたびに強制ログアウトされる**（*"Each time you change the login mode you will be forced to log out."*）。**切替手順に「別ブラウザ／別セッションで復旧経路を開いたまま作業する」ことを明記** | [確] |
+| **2** | **`edge` テナントにも break-glass（R-07）を残す。** ガード 1 は `management` しか守らず、しかも条件付き。⚠️ **他人のローカルユーザーのパスワードは管理者でも変更できない**（§12.8）ため、**「作っておく」だけでなく有効性を定期確認する** | [確] |
+| **2b** | ⚠️ **break-glass の TFA は SSO redirect 下では使えません。** *"Note that the **TOTP method is only available with the login mode 'OAI-Secure'**."* — SSO redirect にすると OAI-Secure が消えるため、**R-07 の TFA 要件が成立しません。** 代替の第 2 要素（物理的なシークレット保管・複数名承認）を §11.5 で決めること | **[要 SV-48]** |
 | **3** | 再割当ポリシーの既定は「毎ログインで全ロール再計算（ルール外はクリア）」。**手動編集は次回ログインで上書きされる** | [確] |
 | **4** | どのルールにもマッチしないと `access denied`（デフォルト拒否）。**クレーム名の 1 文字違いで全ユーザーがログイン不可**になる | [確] |
 | **5** | **デバイス認証とサービスユーザーは SSO 対象外** | [確] |
 | **6** | **順序**: 先に Edge 側でロールを定義 → 対応するグループを Keycloak で作る | [判] |
-| **7** | ⚠️ **[要 SV-04] SSO からローカル認証へ戻す手順を、実機で検証して runbook 化すること**。UI から選択肢が消えても `PUT /tenant/loginOptions/{typeOrId}` が Basic 認証の API で叩けるかが鍵 | **最優先** |
+| **7** | ⚠️⚠️ **[要 SV-04] SSO からローカル認証へ戻す手順を、実機で検証して runbook 化すること**。**API 経路の一部は確定しました**が、決定的な穴が残っています（下記） | **最優先** |
 | **8** | ⭐ **切替前ゲート**: SSO ユーザー 1 名で実際にログインでき、期待するロールと Inventory ロールが付与されることを、**ログインモードを切り替えずに**確認する | [判] |
+
+> ⚠️⚠️ **[要 SV-04] ガード 7 の核心 — 「ログインモード」の実体が API 仕様に見当たりません。**
+>
+> - `PUT /tenant/loginOptions/{typeOrId}` は実在し、`security` に `Basic: []` を含むので **Basic 認証で叩けます** [確]
+> - **しかし `authConfig` スキーマに「preferred login mode」に相当するフィールドがありません。** `visibleOnLoginPage` / `onlyManagementTenantAccess` はありますが該当せず、生 spec を `loginMode` / `preferred.*login` で検索してもヒットしません
+>
+> **つまり「ログインモード」は別のテナントオプションである可能性が高く、`/tenant/loginOptions` の PUT だけでは戻せないおそれがあります。** これが SV-04 の本当のリスクです。
+>
+> **検証手順に次を追加してください**:
+> 1. SSO を有効化する**前**に `GET /tenant/options` で全カテゴリ・全キーをダンプして保存する
+> 2. SSO 有効化**後**に同じダンプを取り、**差分からログインモードに相当するキーを特定する**
+> 3. そのキーを Basic 認証で書き戻せることを実機で確認する
+>
+> **[判] 上記 1 のダンプ取得を、SSO 有効化の作業手順に必須ステップとして組み込んでください。** 事後には差分が取れません。
+
+> ⚠️ **併せて `BasicAuthenticationRestrictions` に注意してください** [確]。`forbiddenClients` / `forbiddenUserAgents` がスキーマ化されており、これらが設定されていると **Basic 認証での復旧そのものが塞がれます**。上記 1 のダンプで現在値を確認しておくこと。
 
 ### 11.7 ⚠️ 権限設計の禁則
 
@@ -2026,10 +2506,18 @@ WAN 断（例: 30 分）
 |---|---|---|
 | **P-01** | **紐づけ確認アプリの登録** | ⚠️ **VM2 ホストのため `createHostedApplication` は不適**。**`type: EXTERNAL` のアプリケーション登録**（アプリスイッチャーとアクセス制御に載せるため）。**[要 SV-24]** Cumulocity にバンドルを載せる案との二択 |
 | **P-02** | **テナントのアプリ購読** | `POST /tenant/tenants/{t}/applications` |
-| **T-02** | ⭐ **CORS 許可オリジン** | テナントオプション `access.control` / `allow.origin`。**既定 `*` からの絞り込み**。**VM2 の全アプリ（紐づけ確認アプリを含む）のオリジンをスキーム + ホスト + ポートで列挙** |
-| **P-03** | 標準ダッシュボード | Cockpit の JSON エクスポート/インポート。**[要 SV-11]** Edge での可否は未検証 |
+| **T-02** | ⭐ **CORS 許可オリジン** | テナントオプション `access.control` / `allow.origin`。**既定 `*` からの絞り込み**。⚠️ **必要ロールは `ROLE_OPTION_MANAGEMENT_ADMIN`**（R-01 に追加済み・§11.2） |
+| **P-03** | 標準ダッシュボード | Cockpit の JSON エクスポート/インポート。**Edge の Cockpit に "Managing exports — Export data to either CSV or Excel files." は含まれる** [確]。**[要 SV-11]** ダッシュボード定義そのもののエクスポート可否は別途確認 |
 
-> ⚠️ **CORS のオリジン一覧が未確定だと、アプリ側が「認証は通るが API が呼べない」状態になります。** VM2 の各アプリ担当からオリジンの完全なリストを受領してください。**ポート番号まで含めた完全一致**です。
+> **[確] `allow.origin` の仕様** — Core OpenAPI `POST /tenant/options` "Default option categories":
+>
+> > **access.control** / `allow.origin` / 既定 `*` / *"**Comma separated list of domains allowed for execution of CORS. Wildcards are allowed (for example, `*.cumulocity.com`)**"*
+>
+> ⚠️ **rev.1 の「スキーム + ホスト + ポートで完全一致」は公式の記述と食い違います。** 公式は「**ドメインのカンマ区切り**」「**ワイルドカード可**」としか述べていません。**実際に受け付ける表記（スキームやポートを含められるか）は実機で確認してください**（**[要 CU-8b]**）。
+>
+> **[判] ワイルドカードが使えるため、VM2 のアプリを共通ドメイン配下に置けば `*.example.internal` の 1 エントリで済みます。** オリジンを 1 つずつ列挙する運用（アプリ追加のたびに設定変更）を避けられるので、**VM2 側のドメイン設計と合わせて決めてください。**
+
+> ⚠️ **CORS のオリジン一覧が未確定だと、アプリ側が「認証は通るが API が呼べない」状態になります。** VM2 の各アプリ担当からオリジンのリストを受領してください。
 
 > ⚠️ **運用知識基盤（S-8/S-9）はサーバサイド常駐プロセスなので CORS は不要です。** ブラウザから叩くアプリだけが対象です。
 
@@ -2042,7 +2530,8 @@ WAN 断（例: 30 分）
 | **AP-a** | ⭐ **ページングは `prev` / `next` リンクで辿る。ページ番号を自前で加算しない** | `acl.algorithm-version` の `OPTIMIZED` は一致件数が閾値（既定 2000）未満のときだけ適用され、超えると `LEGACY` に落ちる [確K]。*"navigation links via 'prev' and 'next' will work properly and this should be the only way of iterating through multiple pages"* |
 | **AP-b** | **エンドユーザーの OIDC トークンを使う**（D-e） | §11.7 AX-2 |
 | **AP-c** | **Operational Store への直接アクセスは行わない**（REST API 経由のみ） | 構成図の配置の要点 |
-| **AP-d** | **通知トークンは 24 時間で失効する。再取得ロジックを実装する** | §10.4 要件 3 |
+| **AP-d** | **通知トークンは既定 1440 分（24 時間）で失効する。再取得ロジックを実装する** | §10.4 要件 3。⚠️ **既定値であって上限ではない**（プロキシ側で短縮する）。⚠️ **失効しても接続中のコンシューマは切断されない** |
+| **AP-g** | ⭐ **WebSocket はアイドル 5 分で切断される。未 ack 1000 件で配信が止まる。再接続と ack を必ず実装する** | §10.4 要件 7。**ack を怠るとバックログ 25 MiB に達し、その拠点のデータ投入が 500 で失敗します**（§10.5） |
 | **AP-e** | **c8y-proxy 経由の呼び出しは散発的に 401 を返す。リトライを実装する** | [確]（§6.8 制約 4） |
 | **AP-f** | **`type` フィルタ・`fragmentType` フィルタで絞ってから取得する** | 全件走査は Edge の負荷になる（§7.7） |
 
@@ -2052,7 +2541,10 @@ WAN 断（例: 30 分）
 
 | # | 否定テスト | 合格条件 | §14 |
 |---|---|---|---|
-| 1 | 拠点 A のユーザー資格情報で拠点 B のデータを **API 直叩き** | 403 / 404 | CT-5 |
+| 1 | 拠点 A のユーザー資格情報で拠点 B のデータを **API 直叩き** | 403 / 404、または**空コレクション** | CT-5 |
+| 1b | ⭐ **拠点 A のユーザーで `GET /alarm/alarms`（絞り込みなし）を叩く** | **自拠点のアラームだけが返る**（全テナント分が返らない） | CT-5 |
+| 1c | ⭐ **拠点 A のユーザーで `GET /inventory/managedObjects`（絞り込みなし）を叩く** | **自拠点配下の MO だけが返る** | CT-5 |
+| 1d | ⭐ **拠点 A の Manager が、拠点 A の main device 配下の「カメラ」のアラームを取得できる** | 取得できる（**届かなければ SV-47 が NG** → §11.3） | CT-4 |
 | 2 | 拠点 A の案件アプリの認証情報でトークン発行プロキシに**拠点 B のサブスクリプション**を要求 | 拒否される | CT-7 |
 | 3 | 拠点 A 用トークンで拠点 B のトピックに WebSocket 接続 | 接続できない | CT-7 |
 | 4 | `ROLE_NOTIFICATION_2_ADMIN` の付与先を機械検査 | R-09 以外に付いていない | CT-6 |
@@ -2060,6 +2552,8 @@ WAN 断（例: 30 分）
 | 6 | Cumulocity UI に Remote access のボタンが出ないこと | 出ない | CT-17 |
 | 7 | 拠点 B の案件アプリに拠点 A のアラームが**届かない**こと | 届かない | CT-8 |
 | 8 | `fragmentsToCopy` で除外したフラグメントが通知に**含まれない**こと | 含まれない | CT-8 |
+
+> ⚠️⚠️ **テスト 1b / 1c は rev.1 のロール定義では必ず失敗しました。** グローバルの `Alarms READ` / `Inventory READ` があると **テナント全体が返る**ためです（§11.2）。rev.2 でグローバル権限を削減したことで初めて意味のあるテストになります。**ロール改訂と否定テストはセットで実施してください。**
 
 ---
 
@@ -2083,9 +2577,22 @@ WAN 断（例: 30 分）
     §13 設定投入へ
 ```
 
-### 12.2 ⚠️ install 後に変更できない項目
+### 12.2 ⚠️ install 前に確定すべき項目
 
-**これらは `c8yedge install` の後では変更できません。⑤に進む前に必ず潰してください。**
+**⑤に進む前に必ず潰してください。**
+
+> ⚠️⚠️ **rev.1 は本節を「install 後に変更できない項目」としていましたが、公式に照らすと変更**できる**ものが多く含まれていました。** Edge の全ページを `immutable` / `cannot be changed` で横断検索した結果、**真に変更不可と明記されているのは `spec.storageClassName` だけ**です。
+>
+> | 項目 | 実際 | 根拠 |
+> |---|---|---|
+> | `storageClassName` | ❌ **変更不可** | *"This value is used only during the Edge installation and **can't be changed for existing installations**."* |
+> | MongoDB 容量 | ⚠️ **増やせる。減らせない** | *"Once Edge is installed, **you can only increase this value, but cannot reduce**."* |
+> | **ドメイン** | ✅ **変更可能** | *"**You can later update the domain and license** to match your environment by following the steps outlined in Modifying Edge."* |
+> | **TLS 証明書** | ✅ **変更可能** | `c8yedge config --set-file tlsSecret.tls.key=<path> --set-file tlsSecret.tls.crt=<path>` / CR の `spec.tlsSecretName` |
+> | **ライセンス** | ✅ **変更可能** | `c8yedge config --set-file licenseKey=<path>` / CR の `spec.licenseKey` |
+> | CPU / RAM | ✅ **増設可能** | *"**You can add more CPU cores or RAM to the host at any time**, and Edge will use the additional resources automatically without further configuration."* |
+>
+> **この誤りの実害**: **TLS 証明書の期限更新という不可避の定期作業が「禁止事項」に分類されていました。** 手順は §12.5 に追記してあります。
 
 | # | 項目 | 内容 | 確度 |
 |---|---|---|---|
@@ -2093,12 +2600,17 @@ WAN 断（例: 30 分）
 | **P-0-2** | **公開ポート** | `cumulocity-ontoplb`（LoadBalancer）: **443, 8443, 1883, 8883**。Edge operator メトリクス: **3443**。*"Edge requires that your Kubernetes cluster does not have an Ingress provider ... enabled on common ports"* | [確] |
 | **P-0-3** | **時刻同期（NTP）** | 社内 NTP を Edge ホスト・Keycloak・画像解析装置・外部Gateway に設定（§6.9 TM-c） | [推] |
 | **P-0-4** | **到達性マトリクス** | Edge → 社内 DNS / Keycloak(JWKS) / オブジェクトストレージ / Genetec、拠点網 → Edge:8883,443、**案件アプリ(VM2) → Edge の WebSocket**（§10.1）、保守VPN → Edge | [推] |
-| **P-0-5** | **ハードウェア最小要件** | CPU **8 コア** / RAM **16 GB** / Disk **150 GB**。**MongoDB は AVX 命令 + x86-64-v3 以降が必須**（`lscpu` で確認） | [確] |
-| **P-0-6** | ⭐ **`storageClassName` の確定** | *"Once the `storageClassName` field is configured in the Edge custom resource (CR), it cannot be changed."* **§7.6 のサイジングを先に済ませる** | [確] |
-| **P-2** | **ドメイン 2 つと TLS 証明書の SAN** | §12.3 | [確] |
-| **P-3** | **ライセンス**（ドメインに紐づく） | *"the license key must always be valid for the domain name, so any change of domain name should be made simultaneously with a change of license key."* | [確] |
+| **P-0-5** | **ハードウェア最小要件** | CPU **8 コア** / RAM **16 GB** / Disk **150 GB**。**MongoDB は AVX 命令 + x86-64-v3 以降が必須**（`lscpu` で確認）。⚠️ **CPU/RAM は後から増設可能**（AVX / x86-64-v3 は CPU 交換になるので事前確認必須） | [確] |
+| **P-0-6** | ⭐⭐ **`storageClassName` の確定** — **本節で唯一の真に不可逆な項目** | *"Once the `storageClassName` field is configured in the Edge custom resource (CR), it cannot be changed."* | [確] |
+| **P-0-7** | **MongoDB 容量の初期値** | 既定 75GB。**増やせるが減らせない**ため、**やや小さめから始めて増設する**運用も選べる（§7.6） | [確] |
+| **P-2** | **ドメイン 2 つと TLS 証明書の SAN** | §12.3。**変更は可能だが波及が大きい**（下記） | [確] |
+| **P-3** | **ライセンス**（ドメインに紐づく） | *"the license key must always be valid for the domain name, so any change of domain name should be made simultaneously with a change of license key."* **ドメインと同時に差し替えること** | [確] |
 
-> ⚠️⚠️ **ドメイン変更は install 後に行わないでください。** TLS 証明書の再発行、Keycloak の redirect URI / backchannel logout URL、**全 thin-edge の `c8y.url` と `c8y.mqtt`**、全ブラウザの信頼設定を巻き込みます。**デバイス接続開始後に気づくと拠点に人を出す作業になります。**
+> ⚠️⚠️ **ドメイン変更は「不可能」ではなく「波及が極めて大きい」です。** `c8yedge config --set domain=` で変更できますが、**TLS 証明書の再発行、ライセンスの同時差し替え、Keycloak の redirect URI / backchannel logout URL、全 thin-edge の `c8y.url` と `c8y.mqtt`、全ブラウザの信頼設定**を巻き込みます。**デバイス接続開始後に行うと拠点に人を出す作業になります。** 事実上は事前確定すべき項目として扱ってください。
+
+> ⚠️ **[要 SV-49] `admin` パスワードを「インストール後に独立して変更可能」とする根拠が見つかりません**（§12.3）。逆に Edge CR は `spec.email` について *"Changes made to the administrator email using the user interface or Cumulocity API **will be overwritten by the Edge operator**"* と述べており、**operator が reconcile するモデル**です。パスワードにも同様の上書きが働く可能性があるため、**実機で確認してください**（SV-37 の復旧手順と併せて）。
+
+> ⚠️ **[要 SV-50] ライセンスの有効期限・更新サイクルは公式に記述が見つかりません。** 証明書と同種の「日付起点リスク」になりうるため、**ベンダーに書面で確認し、期限があるなら §12.7 のメタ監視に加えてください。**
 
 ### 12.3 2 テナント構成
 
@@ -2149,7 +2661,20 @@ WAN 断（例: 30 分）
 |---|---|---|---|
 | **E-11** | ⭐ **`c8yedge-operator-config` ConfigMap** | **閉域網で必須**。`ca.crt`（信頼する追加 CA の PEM バンドル）と `no_proxy`（**両テナントドメイン + Pod CIDR + Service CIDR を必ず含める**）。**適用後は operator の再起動が必要** | [確] |
 | — | **社内 CA ルート証明書の配布** | 全ブラウザ・**全 thin-edge デバイス**・**Edge operator** が Edge を信頼する | [確] |
-| — | **デバイス側の信頼ストア** | thin-edge の `c8y.root_cert_path`（MQTT）と **`c8y.proxy.ca_path`（HTTP）は別キー**。**両方を明示設定しないと「MQTT は繋がるが添付だけ失敗する」** | [確] |
+| — | **デバイス側の信頼ストア** | thin-edge の `c8y.root_cert_path`（MQTT）と **`c8y.proxy.ca_path`（HTTP）は別キー** [確]。⚠️ **既定はどちらもシステム既定（`/etc/ssl/certs`）** なので、「両方を明示設定しないと失敗する」わけではありません。**実際の失敗モードは「片方だけカスタムパスを指定したとき」**です | [確] |
+
+#### ⭐ Edge サーバー証明書の更新手順 〈rev.2 で追加〉
+
+**`c8yedge` の場合** [確]:
+
+```bash
+sudo c8yedge config --set-file tlsSecret.tls.key=<path-to-key> \
+                    --set-file tlsSecret.tls.crt=<path-to-cert>
+```
+
+**自前 K8s の場合** [確]: `kubectl create secret tls edge-tls-secret --cert=<crt> --key=<key>` → Edge CR の `spec.tlsSecretName` を更新して `kubectl apply`
+
+> ⚠️⚠️ **rev.1 は §12.2 で「TLS は install 後に変更できない」と誤記していたため、この定期作業の手順が本書から欠落していました。** 証明書の有効期限は必ず来ます。**§12.7 のメタ監視に「Edge サーバー証明書（`<domain>` / `management-<domain>`）の残存期間」を必ず加え、更新を runbook 化してください**（[担当範囲] RB-13）。失効すると**全拠点・全案件アプリの HTTPS / WebSocket が同時に全断**します。
 
 > ⚠️ **証明書・社内 CA のローテーション手順が必要です**（SV-22）。社内 CA ルートを更新すると **thin-edge 側の信頼ストア更新が必要**で、数百台 × N 拠点が同時に接続不能になり得ます。しかも**配布経路（Cumulocity 経由のソフトウェア更新）も同時に使えません**。**新旧 CA を並行して信頼させる移行期間**を設計に入れてください。
 
@@ -2175,7 +2700,7 @@ WAN 断（例: 30 分）
 |---|---|---|
 | **1** | **Otel Collector の prometheus receiver で取り込む** | OTLP ネイティブ出力は未記載。これが正攻法 |
 | **2** | ⭐ **アラート通知先を Cumulocity の外側に持つ** | **変-2 でメールが無いため、これが基盤異常の唯一の検知経路**（SV-34 / TB-5） |
-| **3** | **監視対象に含めるもの** | ①Edge 自体の死活 ②`c8y_Application_Down` / `_Unhealthy` ③**デバイス証明書の有効期限**（§3.6）④**Notification 2.0 のサブスクライバ数・バックログ量**（**[要 SV-33]** 取れるか未確認）⑤ディスク使用率 ⑥PENDING オペレーション件数（§4.11） |
+| **3** | **監視対象に含めるもの** | ①Edge 自体の死活 ②`c8y_Application_Down` / `_Unhealthy` ③**デバイス証明書の有効期限**（§3.6）④**Notification 2.0 のサブスクライバ数・バックログ量**（**公式 UI に危険域つきの画面あり** — §10.5。**Used backlog 80% でアラート**）⑤ディスク使用率 ⑥PENDING オペレーション件数（§4.11）⑦⭐ **Edge サーバー証明書（`<domain>` / `management-<domain>`）の残存期間**（§12.5）⑧⭐ **オフロードジョブの成功／失敗とラグ**（§7.5。**サイレント失敗が 90 日続くとデータが恒久的に失われる**）⑨ **`te/errors` に出る拒否メッセージ**（§6.7）⑩ **[要 SV-50]** ライセンス期限（存在する場合） |
 | **4** | ⚠️ **メタ監視の向き** | 構成図は `保守端末 → VM1`（pull）。**D9「自社側から拠点への着信接続は設けない」とは逆向き**。VPN 内なら D9 の例外に収まるが、**FW 審査と攻撃面の観点で設計判断として再確認が必要**（SV-23） |
 
 > ⚠️ **[要 TB-5] 誰が刈り取り、誰に通報するかが未確定です。** これが決まらないと、**基盤自身の異常が誰にも届きません。**
@@ -2206,7 +2731,7 @@ WAN 断（例: 30 分）
 
 | # | 手段 | 適用対象 | 留意点 |
 |---|---|---|---|
-| 1 | **削除 → 同名で再作成** | **サービスアカウント**（R-05, R-06, R-08, R-09, R-11, R-12） | ユーザー ID が変わるため**ロール・Inventory ロール・アプリアクセスの再割当が必要**。**投入スクリプトが冪等なら再実行で復旧できる** |
+| 1 | **削除 → 同名で再作成** | **サービスアカウント**（R-05, R-06, R-08, R-09, R-11, R-12） | ユーザー削除で割当も消えるため**ロール・Inventory ロール・アプリアクセスの再割当が必要**。**ユーザー ID（＝ユーザー名）は変わらない**が、**パスワードが変わるので CI シークレットの更新が必須**。**投入スクリプトが冪等なら再実行で復旧できる** |
 | 2 | **admin が複数居る状態を保つ** | 両テナントの管理者 | ただし同じ制約を受けるため、**admin 自身の資格情報は削除・再作成では救えない** |
 | 3 | **資格情報のエスクロー保管** | **両テナントの admin と break-glass のみ** | §11.5 |
 
@@ -2249,7 +2774,7 @@ WAN 断（例: 30 分）
 |---|---|---|
 | **CF-a** | **全設定を構成コードで管理する。UI からの手作業を禁止**（D10） | 再現性。手作業は次回の投入で上書き／重複する |
 | **CF-b** | **各フェーズの先頭で「対象リソースの GET エクスポート + タグ付きコミット」を実施する** | §13.7 の往復差分の基準になり、切り戻しの起点にもなる |
-| **CF-c** | ⚠️ **`C8Y_MODE=ci` を使う。`prod` は使わない** | **`--mode prod` は Create/Update/Delete が全て無効**で、スクリプトが**エラーも出さずに何も投入せず完走する** [確] |
+| **CF-c** | ⚠️⚠️ **`C8Y_MODE=ci` を明示する。未指定は危険** | **未指定時の既定は `prod`**（`SessionModeProduction`）で、**Create/Update/Delete が全てエラーになり非ゼロ終了します** [確]（*"If set to false then all POST related commands will **return an error**."*）。`--sessionMode ci` フラグでも指定可。⚠️ rev.1 は「エラーも出さずに完走する」としていましたが誤りで、**実際はエラーで落ちます**（結論は同じ） |
 | **CF-d** | **全コマンドに `--session <name>` を明示する** | management / edge の 2 セッションを取り違えると、投入先を間違える |
 | **CF-e** | **`--dry --dryFormat json` の出力に `Authorization: Basic` ヘッダが含まれ得る** | CI ログに残さない |
 | **CF-f** | **L0 / L1-B / L1-C の分離を崩さない** | **この分離ができているかが、2 案件目を `site/` だけの作業で立ち上げられるかを決める** |
@@ -2261,7 +2786,7 @@ WAN 断（例: 30 分）
 | 定義（章） | 設定項目 ID | 設定対象 | 分類 | 詳細 |
 |---|---|---|---|---|
 | §1 デバイス管理グループ | **G-01** 拠点 device group 階層 | edge | L1-C | §13.3.3 |
-| §1.4 グループの external ID | **G-02** グループの external ID | edge | L1-C | §13.3.3 |
+| ~~§1.4 グループの external ID~~ | ~~**G-02**~~ **rev.2 で廃止**（G-04 に統合） | — | — | §13.3.3 |
 | §1.5 グループのフラグメント | **G-04**〈新〉 グループの `x_Site` | edge | L1-C | §13.3.3 |
 | §2 命名規約 | — | **設定ではなく規約文書 + バリデータ** | L1-B | §13.3.12 |
 | §2.8 機械検査 | **CK-1〜CK-6** | CI | — | §13.7 |
@@ -2336,10 +2861,25 @@ WAN 断（例: 30 分）
 
 | ID | 設定項目 | **[判] 設定値** | 設定手段 | 冪等 |
 |---|---|---|---|---|
-| **G-01** | 拠点 device group 階層 | **root（`sites`）→ 拠点グループ（`site001`…）の 2 段**（§1.2 / §1.7 G-e） | `c8y inventory create` + `childAssets` 追加、または一括登録 CSV の `PATH`（§3.3） | **E: 409 黙殺** |
-| **G-02** | グループの external ID | **拠点コード**（英数字のみ・§1.4） | `c8y identity create` | **E: 409 黙殺** |
+| **G-01** | 拠点 device group 階層 | **root（`sites`）→ 拠点グループ（`site001`…）の 2 段**（§1.2 / §1.7 G-e）。**`type` は root=`c8y_DeviceGroup` / サブ=`c8y_DeviceSubGroup`**（§1.5） | `c8y inventory create` + `childAssets` 追加、または一括登録 CSV の `PATH`（§3.3） | ⚠️⚠️ **C: 存在チェック → 分岐**（下記） |
+| ~~**G-02**~~ | ~~グループの external ID~~ | **rev.2 で廃止。** グループの同定は **`x_Site.siteId`（G-04）** で行う（§1.4） | — | — |
 | **G-03** | Inventory ロールの割当 | **SSO の `inventoryMappings` で管理**（§11.3 IR-b） | §13.3.11 の `authConfig` | 上書き |
-| **G-04**〈新〉 | グループの `x_Site` フラグメント | `{ "siteId": "site001", "siteName": "…" }` | `c8y inventory update` | **C: 存在チェック** |
+| **G-04**〈新〉 | ⭐ グループの `x_Site` フラグメント | `{ "siteId": "site001", "siteName": "…" }`。**rev.2 で G-02 を統合し、これが拠点グループの唯一の同定キーになりました** | **作成時に `c8y inventory create` の本文へ含める**（後付け UPDATE にしない） | **C: 存在チェック** |
+
+> ⚠️⚠️ **G-01 に「409 黙殺」は使えません** [確]。`POST /inventory/managedObjects` の応答定義は **`201` / `401` / `403` / `422` のみで 409 がありません**。一意制約を持つ API（`POST /user/{t}/users`、`POST /notification2/subscriptions`）は 409 を返すので、**これは仕様上の意図**です。
+>
+> **つまり同名・同 `siteId` のグループを再作成すると、エラーにならず黙って 2 個目が生えます。** rev.1 の冪等化パターンでは**再実行のたびに拠点グループが増殖**しました。
+>
+> **[判] 正しい手順**:
+>
+> ```bash
+> # ① x_Site.siteId で既存を引く（グループ名ではなく siteId で引くこと）
+> EXISTING=$(c8y inventory find --session edge -o json \n>   --query "has(c8y_IsDeviceGroup) and x_Site.siteId eq '$SITE_ID'" --select id)
+>
+> # ② 無ければ作成（x_Site を作成時の本文に含める）。あれば更新のみ
+> ```
+>
+> ⚠️ **`--force` は upsert ではありません**（*"Do not prompt for confirmation"* の意味）。go-c8y-cli に upsert / sync 系のコマンドはありません。
 
 **拠点定義ファイルの例**（`config/site/sites/site001.yaml`）:
 
@@ -2348,7 +2888,7 @@ siteId:    site001                  # 英数字のみ（§2.5）
 siteName:  "〇〇工場 東棟"           # 表示名（日本語可）
 devices:
   imageAnalyzer:
-    serial:  SN00123                # → extID: site001:ANLZ-SN00123
+    serial:  SN00123                # → extID: site001-ANLZ-SN00123（main はコロン不可・§2.2 X-f）
     cameras:
       - serial: SN12345             # → extID: site001:CAM-SN12345
         vmsCameraId: gsc-cam-8842   # ★必須（未設定はツールがエラー）
@@ -2379,7 +2919,8 @@ devices:
 | **R-11**〈新〉 | オフロードバッチ用 | 拠点横断 READ | 同上 | 同上 |
 | **R-12**〈新〉 | クリップ保存サービス用 | Alarms READ | 同上 | 同上 |
 | **R-13**〈新〉 | ⭐ **Cloud Remote Access ロール** | **どのロール・どのユーザーにも割り当てない** | — （**投入しないことが設定**） | **CI で検査**（§13.7） |
-| **A-05** | パスワードポリシー / TFA | **管理者アカウントの有効期限は無期限**（§11.5 統制 3） | `c8y tenantoptions updateBulk`（`password` カテゴリ） | 上書き |
+| **A-05a** | パスワードポリシー | ⚠️ **`Password validity limit` は**テナント全体**の設定で、アカウント単位に指定できません**（*"use '0' for unlimited validity of passwords (default value)"*）。§11.5 統制 3 の「管理者アカウントの有効期限は無期限」は**実装不能**なので、テナント方針として決め直すこと（**[要 CU-14]**） | `c8y tenantoptions updateBulk`（`password` カテゴリ） | 上書き |
+| **A-05b** | TFA | ⚠️ **`password` テナントオプションでは設定できません。** `PUT /tenant/tenants/{tenantId}/tfa` ／ **`c8y tenants tfa update --strategy TOTP`** を使うこと。⚠️ **TOTP は OAI-Secure ログインモード限定**（§11.6 ガード 2b） | `c8y tenants tfa update` | 上書き |
 
 > ⚠️ **投入前に `GET /user/roles` で実際の `ROLE_*` 名を確認してください。** UI の権限レベルと API ロール名は 1:1 対応しません（§11.2）。
 
@@ -2396,7 +2937,7 @@ devices:
 | **D-06** | external ID | `{siteId}:{機器種別}-{シリアル}`（§2.2） | プロビジョニングツール（thin-edge の `@id`） | — |
 | **D-07** | child device 登録 | §3.5 手順 4〜7 | プロビジョニングツール（`POST /te/v1/entities`） | **C: 存在チェック** |
 | **D-08** | main device の拠点グループ編成 | **拠点あたり 2 回**（案 β） | `c8y api POST /inventory/managedObjects/{groupId}/childAssets` | **E: 409 黙殺** |
-| **D-09** | アラームストーム抑止 | child に `c8y_RequiredAvailability = {"responseInterval": 0}` | プロビジョニングツール（twin） | **C: 存在チェック** |
+| **D-09** | アラームストーム抑止 | child に `c8y_RequiredAvailability = {"responseInterval": 32767}`。⚠️ **`0` は全アラーム抑止になるため不可**（§5.2）。**thin-edge の初回接続より前に投入すること**（§5.5） | プロビジョニングツール（twin） | **C: 存在チェック** |
 | **D-12**〈新〉 | ⚠️ **`autoRegistrationEnabled` の無効化** | **方式 (2) を使った場合のみ**。一括登録完了後に必ず無効化 | `c8y api PUT /tenant/tenants/{t}/trusted-certificates/{id}` | 上書き |
 
 > ⚠️ **D-10 は前提 3（SV-08 / TE-8）に依存します。** NG の場合は方式 (2)（自己署名 CA + trusted certificate）に切り替え、**D-12 の無効化を必ずセットで実施**してください。
@@ -2422,10 +2963,25 @@ c8y retentionrules create --session edge --dataType ALARM       --maximumAge 90
 c8y retentionrules create --session edge --dataType OPERATION   --maximumAge 90
 c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <要決定>
 
-# ③ 旧ルール（既定 60 日）を個別に削除
+# ③ 旧ルールを個別に削除（存在する場合のみ。⚠️ [要 SV-43]）
 ```
 
 > ⚠️⚠️ **順序を守ってください。** 削除が先だと、作成に失敗した場合に**リテンションルールがゼロの状態で放置**されます（§7.2）。
+
+> ⚠️⚠️ **[要 SV-43] 手順③は空振りする可能性があります。** 「既定 60 日」は公式に明記されていますが、**それが `c8y retentionrules list` で列挙・削除できるオブジェクトとして存在するという記述は、docs / OpenAPI / Tech Community のいずれにもありません**（3 経路で探索済み）。
+>
+> **手順①の出力（`retentionrules.current.json`）を見て分岐してください**:
+>
+> | ①の結果 | 意味 | 対応 |
+> |---|---|---|
+> | 60 日のルールが列挙される | 削除可能なオブジェクトとして存在する | ③をそのまま実行 |
+> | **空、または 60 日のルールが無い** | **60 日はシステム設定側の値** | ⚠️ **③は不要。ただし `GET /tenant/system/options` で保持日数キーを探し、90 日ルールより先にシステム設定の 60 日が効かないことを検証環境で必ず確認すること** |
+>
+> **後者だった場合、90 日のルールを入れても 60 日でデータが消える可能性が残ります。§7.2 のデータ保持設計そのものが崩れるため、W1 の最優先項目です。**
+
+> ⚠️ **`--dry` が正しいフラグ名です** [確]（`--dry-run` は存在しません）。`--dryFormat <markdown|dump|json|curl>` で出力形式を選べます。⚠️ **`--dryFormat json` / `curl` は Authorization ヘッダを出力に含めます** — CI ログに残さないでください（§13.1 CF-e）。
+
+> ⚠️ **`--maximumAge` を省略すると 365 日になります**（go-c8y-cli の bodyTemplate 既定）。**全ルールで明示してください。**
 
 > ⚠️ **`AUDIT` の日数が未決のままこの手順を実行しないでください。**
 
@@ -2435,10 +2991,10 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
 |---|---|---|---|---|
 | **S-01** | スマートルール | §8.2 RU-1 / RU-2 | ⚠️ **[要 SV-32]** managed object の `type` / `fragmentType` の実値が未確定。**GUI で 1 つ作成 → `c8y inventory find` で観測してから投入スクリプトを書く** | **C: 存在チェック** |
 | **S-02** | EPL apps | §8.2 RU-3 / RU-4 / RU-5 | `c8y api POST /service/cep/eplfiles`。**ソースごと Git 管理** | **B: PUT 先行 → 404 なら POST** |
-| **S-03** | アラーム自動クリア | §8.3 | スマートルールまたは EPL | 同上 |
+| **S-03** | アラーム自動クリア | §8.3 | ⚠️ **EPL**（時限クリアに使える組み込みスマートルールは存在しない・§8.3） | 同上 |
 | **S-04** | **イベント/アラーム型・ペイロード規約** | §6.4 / §6.5 | ⚠️ **設定ではなく規約文書 + バリデータ**（§13.3.12） | — |
 
-> ⚠️ **前提**: **Apama-ctrl / Smartrule マイクロサービスへの購読**が必要です（§12.4 確認 5）。
+> ⚠️⚠️ **前提**: **Apama-ctrl / Smartrule マイクロサービスへの購読**が必要です（§12.4 確認 5）。**加えて、Edge が同梱する Apama-ctrl のバリアントによっては EPL Apps 自体が使えません**（§8.1 [要 SV-45]）。**S-02 / S-03 の投入は SV-45 の確認後に着手してください。**
 
 > ⚠️ **投入は型名（§6.4）の確定が前提です。** 型が決まる前にルールは投入できません。
 
@@ -2473,14 +3029,14 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
 
 > ⚠️ **`subscription` 名は英数字のみ**（§2.5）。拠点コードをそのまま使います。
 
-> ⚠️ **`source` にはグループの MO ID（グローバル ID）が必要**なので、**G-01 / G-02 の投入後**にしか実行できません（§13.4）。
+> ⚠️ **`source` にはグループの MO ID（内部 ID）が必要**なので、**G-01 / G-04 の投入後**にしか実行できません（§13.4）。⚠️ **external ID ではなく内部 ID です** — `x_Site.siteId` で引いた MO の `id` を使ってください（§1.4）。
 
 #### 13.3.9 リポジトリ系（M / K 系）
 
 | ID | 設定項目 | **[判] 設定値** | 設定手段 | 冪等 |
 |---|---|---|---|---|
 | **M-01** | ソフトウェアリポジトリ | `softwareType = aimodel`（§4.4） | `c8y software create` / `c8y software versions create` | **C: 存在チェック** |
-| **M-02** | モデル配布オペレーション | `c8y bulkoperations create`（**`creationRamp` 必須**・§4.8） | CLI | — |
+| **M-02** | モデル配布オペレーション | `c8y bulkoperations create`（**`--creationRampSec` 必須**・§4.8）。⚠️ **フラグ名は `--creationRampSec`**。`creationRamp` は API ボディのフィールド名 | CLI | — |
 | **M-03** | モデルの保持世代 | **[要 TE-20]** 保持世代数と削除運用 | 運用手順 | — |
 | **K-03** | 設定リポジトリ | 配布対象が確定してから（**[要 SV-17]**） | `c8y configuration create` / `send` | **C: 存在チェック** |
 | **K-04** | デバイスプロファイル | 型ごとの「あるべき設定の束」。**[要 SV-17]** | `c8y deviceprofiles create` | 同上 |
@@ -2504,7 +3060,8 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
 | **A-02** | `onNewUser.dynamicMapping.mappings[]` | R-01〜R-03 / R-10 とアプリアクセスの割当 | 同上（A-01 に含まれる） | 同上 |
 | **A-03** | ⭐ `onNewUser.dynamicMapping.inventoryMappings[]` | **拠点 Inventory ロールの割当 ＝ 拠点分離の実装点** | 同上 | 同上 |
 | **A-04** | ログインモード切替 | ⚠️ **§11.6 ガード 8（切替前ゲート）合格が必須** | UI / API | — |
-| **A-05** | パスワードポリシー / TFA | §13.3.4 | `c8y tenantoptions updateBulk` | 上書き |
+| **A-05a** | パスワードポリシー | §13.3.4 | `c8y tenantoptions updateBulk` | 上書き |
+| **A-05b** | TFA | §13.3.4 | **`c8y tenants tfa update`** | 上書き |
 
 > ⚠️ **エクスポート JSON から `id` を必ず除去してください**（リクエストボディでは `readOnly`）[確]。
 
@@ -2543,7 +3100,7 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
    ├─ パスワードポリシー / TFA（A-05）
    └─ サービスアカウント復旧手順の確認（削除 → 再作成 → ロール再割当）
    ▼
-④ 拠点グループ階層（G-01）→ external ID（G-02）→ x_Site（G-04）
+④ 拠点グループ階層（G-01・x_Site を本文に含めて 1 ステップ / G-02 は rev.2 で廃止）
    ▼
 ⑤ テナント CA（D-10）── 前提 3 の結論が必要
    ▼
@@ -2588,7 +3145,7 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
 | **B: PUT 先行 → 404 なら POST** | 更新優先 | `loginOptions`（A-01）、EPL apps（S-02） |
 | **C: 存在チェック → 分岐** | GET してから作成 | ユーザー（R-05〜R-12）、グローバルロール定義、ソフトウェア（M-01）、サブスクリプション（N-01）、child device（D-07） |
 | **D: 宣言的な集合適用** | ⚠️ **新規作成 → 旧削除の順** | リテンション（X-01） |
-| **E: 重複エラー黙殺（409）** | 作成を試みて 409 を無視 | Inventory ロール定義（R-04）、グループ（G-01/G-02）、`childAssets` 追加（D-08）、テナントのアプリ購読（P-02） |
+| **E: 重複エラー黙殺（409）** | 作成を試みて 409 を無視 | Inventory ロール定義（R-04）、**`childAssets` 追加（D-08）**、テナントのアプリ購読（P-02）<br>⚠️ **rev.2 でグループ（G-01 / G-02）を除外しました** — `POST /inventory/managedObjects` は 409 を返さないため、黙殺しても重複が防げません（§13.3.3） |
 
 ### 13.6 リポジトリ構成
 
@@ -2643,14 +3200,14 @@ scripts/
 | **AS-1** | **設定の往復差分** | **Git 定義 vs 実機の差分がゼロ** | `scripts/assert-config.sh`（GET → 正規化 → diff） |
 | **AS-2** | システムオプションのアサート | 期待どおり | `c8y systemoptions list` |
 | **AS-3** | ⭐ **`ROLE_NOTIFICATION_2_ADMIN` の付与先検査** | **R-09 以外に付いていない** | CK-6。**CI に載せる** |
-| **AS-4** | ⭐ **Cloud Remote Access ロールの検査** | **どのロール・どのユーザーにも付いていない** | R-13。CI |
+| **AS-4** | ⭐ **Cloud Remote Access ロールの検査** | **`ROLE_REMOTE_ACCESS_ADMIN` がどのロール・どのユーザーにも付いていない**（既定で未割当なので、維持されていることの確認） | R-13。CI |
 | **AS-5** | ⭐ **external ID の規約準拠** | 規約外の MO が 0 件 | CK-1。CI |
 | **AS-6** | device type の規約準拠 | 4 種以外が 0 件 | CK-2。CI |
 | **AS-7** | `vmsCameraId` の設定 | 未設定が 0 件 | CK-3。CI |
 | **AS-8** | main device の拠点グループ所属 | 未所属が 0 件 | CK-4。CI |
 | **AS-9** | external ID プレフィックスと実所属拠点の一致 | 不一致が 0 件 | CK-5。**日次** |
 | **AS-10** | child device のフラグメント検査 | `c8y_SupportedOperations` と `com_cumulocity_model_Agent` が付いていない | CI |
-| **AS-11** | リテンションルールの存在 | 5 種すべてが存在し、既定 60 日ルールが残っていない | CI |
+| **AS-11** | リテンションルールの存在 | 5 種すべてが存在すること。⚠️ **「既定 60 日ルールが残っていない」の検査は [要 SV-43] の結果が出るまで保留**（そのようなオブジェクトが存在しない可能性がある・§7.2） | CI |
 | **AS-12** | サブスクリプション定義 | 拠点数ぶん存在し、`fragmentsToCopy` が指定されている | CI |
 
 > ⚠️ **AS-3 / AS-4 / AS-5 は「壊れても長期間気づけない」種類の破綻です。CI に載せることが唯一の歯止めです。**
@@ -2676,7 +3233,7 @@ scripts/
 | **CT-1** | 実デバイス 1 台の疎通 | **正しい拠点グループの配下**に現れる |
 | **CT-2** | ⭐ **external ID の規約準拠** | 全デバイス・全 child が `{siteId}:{種別}-{シリアル}`。**規約外の MO が 1 つも無い**（CK-1・**CI に載せる**） |
 | **CT-3** | `vmsCameraId` の設定 | **全カメラに設定されている**（未設定 0 件・CK-3） |
-| **CT-4** | ⭐ **拠点グループ購読**（前提 2 / SV-35 の実証） | 拠点グループを `source` にしたサブスクリプションで、**配下デバイス（child を含む）のアラームが届く**。**届かない場合は §1.6 の代替案 (i) に切り替える** |
+| **CT-4** | ⭐⭐ **「配下をどこまで辿るか」の一括検証**（前提 2 / SV-35 ＋ 前提 7 / SV-47） | **1 つの階層構成で通知と Inventory ロールを同時に検証する。**<br>**構成**: 拠点グループ G の `childAssets` にサブグループ G1 → G1 の `childAssets` にデバイス D → **D の `childDevices` にカメラ C**<br>**(a) 通知**: `{context:"mo", source:{id:G}, apis:["alarmsWithChildren"]}` で購読し、**D のアラームと C のアラームのどちらが届くか**<br>**(b) Inventory ロール**: G に Inventory ロールを割り当てた拠点 Manager が、**D と C のアラーム・インベントリを REST で取得できるか**<br>**判定**: D のみ → `childAssets` 限定。C も → `childDevices` も辿る<br>**NG の場合**: (a) は §1.6 の代替案 (i) へ。(b) は §1.3 の階層設計変更（カメラも `childAssets` で拠点グループに直付け）へ |
 | **CT-5** | ⭐ **Inventory ロールの否定テスト** | 拠点 A のユーザー資格情報で拠点 B のデータを **API 直叩き**して 403/404 |
 | **CT-6** | ⭐ **`ROLE_NOTIFICATION_2_ADMIN` の機械検査** | **R-09 以外のどのユーザー・ロールにも付いていない**（CK-6・**CI に載せる**） |
 
@@ -2691,7 +3248,9 @@ scripts/
 
 | # | 試験 | 合格条件 |
 |---|---|---|
-| **CT-9** | ⭐ **child のアラーム抑止**（§5.3 の落とし穴） | **接続から 1 時間以上経過しても、カメラ・BOX に `c8y_UnavailabilityAlarm` が 1 件も出ない** |
+| **CT-9** | ⭐ **child の可用性アラーム抑止**（§5.3 の落とし穴） | **接続から 1 時間以上経過しても、カメラ・BOX に `c8y_UnavailabilityAlarm` が 1 件も出ない**（`responseInterval: 32767` が効いている） |
+| **CT-9b** 〈rev.2〉 | ⭐⭐ **メンテナンスモードの副作用の否定テスト** | **`responseInterval: 0` にした child へ `x_CameraDown` を POST し、実際に登録されないことを確認する**（レスポンスの `self` が `/alarm/alarms/null` になる）。**そのうえで `32767` では正常に登録されることを確認する**。⚠️ **この 2 つを比較しないと、§5.4 の訂正が効いているか判定できません** |
+| **CT-9c** 〈rev.2〉 | ⭐ **117 が既存値を上書きしないことの確認**（§5.5） | ①Cumulocity 側に先に `responseInterval` を入れてから thin-edge を初回接続 → **①の値が残る**<br>②thin-edge を先に接続してから `tedge config set c8y.availability.interval` を変更 → **Cumulocity 側の値は変わらない**<br>**②が確認できたら、既存拠点向けの一括置換手順（TE-5b）を確定する** |
 | **CT-10** | **死活監視サービスの死** | サービスを kill → **Cumulocity 上でサービスが `down` になる**（LWT）→ watchdog が再起動 → **起動時にアラーム状態が再評価される** |
 | **CT-11** | ゲートウェイ断 | 通信停止 → `responseInterval` 後に `c8y_UnavailabilityAlarm` → 復旧で**自動クリア** |
 | **CT-12** | カメラ断 | 無応答 N 回で `x_CameraDown` → 復旧でクリア。**ヒステリシスが効きフラッピングしない** |
@@ -2700,9 +3259,10 @@ scripts/
 
 | # | 試験 | 合格条件 |
 |---|---|---|
-| **CT-13** | **severity 変更時の挙動**（§9.4 の 2 層の一意性規則） | severity を変えて再 publish したときに Cumulocity 側で何が起きるかを観測し、**結果を規約に反映する**（型規約の確定前に実施） |
+| **CT-13** | **severity 変更時の挙動**（§9.4） | **公式の予測どおり「severity 変更が無視される」ことを 1 ケースで確認する**（*"Any other changes are ignored"*）。⚠️ rev.1 は「観測して規約に反映する」としていたが、**公式に答えがあるため型規約の確定を待つ必要はない**（§9.4） |
+| **CT-13b** 〈rev.2〉 | ⭐ **アラームマッピングの前方一致の確認**（§9.2） | `x_Alarm_` をキーに 1 件だけマッピングを置き、**`x_Alarm_Intrusion` と `x_Alarm_Loitering` の両方に効く**ことを確認する。**併せて、意図しない型（例 `x_Alarm` で始まる別型）が巻き添えにならないか**を AM-a〜AM-c の観点で確認 |
 | **CT-14** | **ペイロード規約の検証** | ①16KB 超のイベントが HTTP に切り替わることを確認 ②16KB 超の**計測が拒否される**ことを確認 ③バリデータが規約違反を検出する |
-| **CT-15** | ⭐ **リプレイ抑止** | 網断復旧の一括再送で、**通知が復旧時刻にまとめて発火しない**（ルール雛形のリプレイ抑止ガードが効いている）。**イベント自体は全件 Operational Store に残っている** |
+| **CT-15** | ⭐ **リプレイ抑止**と**欠落**の両方 | ①網断復旧の一括再送で、**通知が復旧時刻にまとめて発火しない**（リプレイ抑止ガードが効いている）②**イベント自体は全件 Operational Store に残っている**<br>⚠️ **③〈rev.2 で追加〉30 分の網断中に送信したメッセージ数と、復旧後に Cumulocity に到達した数が一致すること。** thin-edge のブリッジ設定に `max_queued_messages` が無く、mosquitto 既定の 1000 件を超えると**欠落**しうる（SV-44・§8.4）。**欠落するならキュー容量の調整が先** |
 
 ### 14.6 オペレーション
 
@@ -2751,7 +3311,8 @@ scripts/
 |---|---|---|
 | **CT-30** | **コンシューマ棚卸し試験**（N-04） | 案件アプリを停止 → **バックログが増えることを観測** → `POST /notification2/unsubscribe` で解除できる |
 | **CT-31** | 証明書の自動更新 | `tedge-cert-renewer@c8y.timer` が動作し、`.new` → 検証 → 差し替えが完了する |
-| **CT-32** | ⭐ **テナント CA 自動更新（10/2）のシミュレート**（SV-25） | 時計を進めて再エンロールが成功する。**複数デバイス同時実行のケースも試す**（§3.7 対応 5） |
+| **CT-32** | ⭐ **証明書更新の輻輳シミュレート**（SV-25 改訂） | ⚠️ **rev.1 の「10/2 の CA 更新日をシミュレート」は不要になりました**（CA 更新でデバイス証明書は失効しない・§3.7）。**代わりに「同一日に発行された多数のデバイス証明書が、一斉に更新期（期限 30 日前）を迎える」状況を再現し、`simplereenroll` が輻輳せず完了することを確認してください。** `RandomizedDelaySec=5m` のジッターで足りるかを判定 |
+| **CT-32b** 〈rev.2〉 | ⭐ **初回 `simpleenroll` の成立**（前提 3 / SV-25b） | ⚠️ **CT-32 とは別のテストケースとして独立させること。** rev.1 は初回エンロールの基礎検証を CA 更新シミュレーションに暗黙に含めており、**前提 3 本来の検証が抜けていました。** 閉域網で `tedge cert download c8y` が成功し、証明書が取得できることを単独で確認する |
 | **CT-33** | **CORS 検証** | VM2 の各アプリから実際にブラウザ経由で Edge の REST を叩き 200 が返る |
 | **CT-34** | **設定の往復差分** | **Git 定義 vs 実機の差分ゼロ**（AS-1） |
 
@@ -2761,11 +3322,13 @@ scripts/
 
 | 優先 | 試験 | NG だと何が変わるか |
 |---|---|---|
-| **1** | **CT-4**（拠点グループ購読） | **§1 の拠点分離方式と §10 の購読設計が同時に破綻**。§1.6 の代替案へ |
-| **2** | **CT-32 / 証明書の EST 可否**（前提 3） | §3.3 の登録方式が変わり、§3.6 の自動更新を別途設計 |
+| **1** | **CT-4**（配下の辿り方） | **§1 の拠点分離方式・§10 の購読設計・§11.3 の Inventory ロールが同時に破綻**。§1.6 の代替案、または §1.3 の階層設計変更へ |
+| **2** | **CT-32b / 証明書の EST 可否**（前提 3） | §3.3 の登録方式が変わり、§3.6 の自動更新を別途設計 |
+| **1b** 〈rev.2〉 | **SV-43**（リテンション既定 60 日の正体） | **90 日ルールを入れても 60 日で消える可能性。§7.2 のデータ保持設計が崩れる** |
+| **1c** 〈rev.2〉 | **SV-45**（Apama-ctrl バリアント） | **§8 の RL-b・RU-2〜RU-5 が全て EPL 前提。§8 の過半が成立しない** |
 | **3** | **CT-8**（通知の到達） | §10 が成立しない。**変-2 と併せて通知経路がゼロ**になる |
 | **4** | **CT-13**（severity の 2 層規則） | §6.4 の型カタログと §9 のマッピングが変わる |
-| **5** | **CT-9**（child のアラーム抑止） | 対処方針 2 が効かない場合、§5.4 の代替案 3（`@health`）へ。**アラーム型規約が変わる** |
+| **5** | **CT-9 / CT-9b**（child の可用性とアラーム抑止） | 対処方針 2 が効かない場合、§5.4 の対処 3（`c8y.availability.enable false`）または 4（`@health`）へ。**4 を採るとアラーム型規約が変わる** |
 | **6** | **CT-28**（合算規模） | 拠点数の上限・死活間隔・Edge のリソース設計が変わる |
 
 ---
@@ -2774,13 +3337,62 @@ scripts/
 
 > **ID 体系**: 本書で新たに提起するものは **`CU-nn`**（Cumulocity Undetermined）。既存の `SV-nn`（[設定書]）・`TE-nn` / `TB-nn`（[担当範囲]）・`V-nn`（vendor-questions）との対応を併記します。
 
+### 15.0 rev.2 での増減 〈ファクトチェック反映〉
+
+**一次情報照合の結果、[要] 項目が入れ替わりました。** 詳細は [ファクトチェック結果](Cumulocity利用設計書_ファクトチェック結果.md) を参照してください。
+
+#### ⭐ 解消・縮小できたもの（W1 の検証工数から外せる）
+
+| 項目 | 結論 | 該当 |
+|---|---|---|
+| **SV-33** Notification 2.0 の監視可否 | **解消。** `Administration > Monitoring > Messaging Service` に公式の監視画面と危険域がある | §10.5 |
+| **SV-25 / TE-7** CA 更新時の再エンロール | **解消。** CA 更新で既存デバイス証明書は失効しない。CT-32 は「初回エンロール日の集中」に付け替え | §3.7 |
+| **CU-13 / CT-13** severity 変更時の挙動 | **解消。** *"Any other changes are ignored"* ＝ severity 変更は無視される。CT-13 は 1 ケースの確認に縮小 | §9.4 |
+| **SV-06** 添付バイナリのリテンション | **解消。** 及ぶ（[確K]）。ただし `files` リポジトリには及ばない | §6.8 / §7.4 |
+| **CU-1** 拠点コードの形式 | **決定材料が揃った。** `subscription` の `pattern: '^[a-zA-Z0-9]+$'` は [確]。案 (a) を前倒しで確定できる | §1.4 |
+| **前提 4 / SV-05** Edge の Notification 2.0 | **「使えるか」は [確]**（`Messaging Service: Included`）。残るのは有効化手順と WS 到達性のみ | §10.1 |
+| **CT-22②** CLEARED 以外は消えない | **解消**（公式に逐語） | §7.3 |
+| **M-1 / M-2 / m-9** CLI コマンド・設定キーの実在性 | **すべて実在。** go-c8y-cli の既定ブランチが `v2` であることが誤判定の原因だった | §3.6 / §2.6 |
+| **TE-6** external ID の文字種・長さ | **解消。** Identity API 側は無制約（スキーマに `pattern`/`minLength`/`maxLength` の定義が無い）。制約が効くのは main device の証明書 CN 経路だけ | §2.7 |
+| **SV-07** `ENROLLMENT_OTP` × `PATH` 併用 | **解消。** 併用可（CSV ヘッダ表に独立した任意列として並記）。排他は `CREDENTIALS` × `AUTH_TYPE` のみ | §3.3 |
+| **SV-38** `childAssets` 追加の 409 | **解消。** 409 を返す（go-c8y-cli 公式例が `silentStatusCodes` で黙殺している）。⚠️ **グループ作成（G-01）は 409 を返さない**ので混同しないこと | §3.5 / §13.3.3 |
+
+#### ⚠️ 新たに [要] となったもの
+
+| ID | 項目 | 該当 | 重要度 |
+|---|---|---|---|
+| **SV-43** | **リテンションの「既定 60 日」が削除可能なオブジェクトとして存在するか** | §7.2 / §13.3.6 | **最優先**（§7.2 のデータ保持設計が崩れうる） |
+| **SV-45** | **Edge 同梱の Apama-ctrl バリアント**（EPL Apps が使えるか） | §8.1 | **最優先**（§8 の過半が EPL 前提） |
+| **SV-47** | **Inventory ロールが `childDevices` まで継承されるか** | §11.3 | **最優先**（前提 2 と同型） |
+| **SV-04**（内容変更） | **「ログインモード」の実体が OpenAPI に無い。** SSO 切り戻しが `loginOptions` の PUT だけで戻らないおそれ | §11.6 | 高 |
+| **SV-44** | **thin-edge のオフラインバッファ容量**（mosquitto 既定 1000 件を超えると欠落しうる） | §8.4 | 高 |
+| **SV-38** | `childAssets` POST の 409 は仕様に定義が無い | §3.5 | 中 |
+| **SV-39** | certificate-authority の Preview → GA 移行（全デバイス再登録が要る告知あり） | §3.6 | 中 |
+| **SV-40** | sm-plugin の 5 分タイムアウトに AI モデルの install が収まるか | §4.4 | 中 |
+| **SV-41** | Edge で Cloud Remote Access マイクロサービスが使えるか（使えないなら §4.7 の懸念が消える） | §4.7 | 中 |
+| **SV-42** | イベント本体と添付を分離して後付けする方式を採るか | §6.8 | 中 |
+| **SV-46** | ソフトウェアバイナリ書込に追加ロールが要るか（「files 権限」は存在しない） | §11.2 | 中 |
+| **SV-48** | SSO redirect 下での break-glass の第 2 要素（TOTP が使えない） | §11.6 | 中 |
+| **SV-49** | Edge の `admin` パスワードが operator に上書きされないか | §12.2 / §12.3 | 中 |
+| **SV-50** | Edge ライセンスの有効期限・更新サイクル | §12.2 | 中 |
+| **TE-23** | MO の `type` が登録後に変更できるか（`@type` の話と混線している疑い） | §3.8 / §2.6 | 中 |
+| **CU-8b** | `allow.origin` がスキーム・ポートを含む表記を受け付けるか | §11.8 | 低 |
+| **CU-14** | パスワード有効期限はテナント単位。「管理者だけ無期限」は実装不能 | §11.5 / §13.3.4 | 低 |
+| **SV-14b** | child device 台数の別軸評価（MO 総数・課金・クエリ性能） | §7.7 | 中 |
+| **CU-15** 〈rev.2〉 | MO 作成時の `externalIds` バインド（原子的な冪等化）と `POST /identity/search` が **Edge の core API 版で使えるか**（Release 2025 / 2026 の spec に無く、SaaS の 2026 年追加機能の可能性） | §13.3.3 | 中 |
+| **CU-16** 〈rev.2〉 | 実テナントで**同名グループを 2 件作れる**ことの実測（OpenAPI 仕様からの推論） | §13.3.3 | 中 |
+| **TE-5b** | 既存拠点の `c8y_RequiredAvailability` 一括置換手順 | §5.5 | 中 |
+
 ### 15.1 本書の前提が崩れるもの（最優先）
 
 | # | 項目 | 確認方法 | 影響 | 既存 ID |
 |---|---|---|---|---|
-| **前提 2** | **`alarmsWithChildren` が `childAssets` を辿るか** | 検証環境（CT-4） | **§1 の拠点分離方式と §10 の購読設計が同時に破綻** | **SV-35 / TE-12** |
+| **前提 2** | **`alarmsWithChildren` が `childAssets` を辿るか** ⚠️ **公式には「descendant managed objects」としか書かれておらず、関係の種別を特定した記述は存在しない**（7 経路で確認済み・§10.2）。**実機確認以外に確定手段なし** | 検証環境（CT-4）**＋ プロダクトサポートへの書面照会を推奨** | **§1 の拠点分離方式と §10 の購読設計が同時に破綻** | **SV-35 / TE-12** |
 | **前提 3** | **certificate-authority（EST）が Edge で使えるか** | 検証環境 + ベンダー照会 | §3.3 の登録方式と §3.6 の証明書更新自動化が変わる | **SV-08 / TE-8 / V8** |
-| **前提 4** | **Edge 上で Notification 2.0 が実動作するか**（WebSocket が LoadBalancer 経由で到達できるか） | 検証環境（CT-8） | **§10 が丸ごと成立しない。通知経路がゼロになる** | **SV-05** |
+| **前提 4** | ~~Edge 上で Notification 2.0 が使えるか~~ → **[確] 使える**（`Messaging Service: Included`）。残るのは **2026 での有効化手順と WebSocket の LoadBalancer 到達性** | 検証環境（CT-8） | 到達できなければ §10 の経路が成立しない。⚠️ **Messaging Service の追加リソース（+2 CPU / +4GB RAM / PV 3 本）を §7.6・§12 に反映すること** | **SV-05** |
+| **前提 6** 〈rev.2 で追加〉 | **Edge 同梱の Apama-ctrl バリアントで EPL Apps が使えるか** | §12.4 の導入直後 | **§8 の RL-b・RU-2〜RU-5 が全て EPL 前提。使えないと §8 の過半が成立しない** | **SV-45** |
+| **前提 7** 〈rev.2 で追加〉 | **Inventory ロールが `childDevices`（カメラ・BOX）まで継承されるか** | 検証環境（CT-4・前提 2 と同時） | **拠点 Manager がカメラ個別のアラーム・インベントリを見られず §11.3 が崩れる** | **SV-47** |
+| **前提 8** 〈rev.2 で追加〉 | **リテンションの「既定 60 日」が削除可能なオブジェクトか、システム設定側の値か** | 検証環境（W1 最優先） | **システム設定側なら、90 日ルールを入れても 60 日で消える。§7.2 が崩れる** | **SV-43** |
 | **前提 1** | **外部Gateway の配置方式（案 α / β）** | 設計判断 | §1.2 の階層図・§6.2 のデータ経路・§10.2 の購読設計 → **付録 A** | [担当範囲] W0-10 |
 | **前提 5** | **型規約・external ID 規約の関係チームとの合意** | 合意プロセス | §7.2・§8・§9・§10.2 が全部やり直し | [担当範囲] C-1 / C-2 |
 
@@ -2788,7 +3400,7 @@ scripts/
 
 | # | 項目 | 該当章 | なぜ最初か | 決定主体 | 既存 ID |
 |---|---|---|---|---|---|
-| **CU-1** | **拠点コードの形式**（案 (a) 英数字統一 / 案 (b) 2 系統） | §1.4 / §2.5 | グループ external ID・サブスクリプション名・topic id の全てに効く。**後から変えると全拠点の再登録** | 基盤 × 案件 | — |
+| **CU-1** | **拠点コードの形式**（案 (a) 英数字統一 / 案 (b) 2 系統） | §1.4 / §2.5 | `x_Site.siteId`・サブスクリプション名・topic id・device external ID の全てに効く。**後から変えると全拠点の再登録**。⭐ **`subscription` の `^[a-zA-Z0-9]+$` は [確] なので、案 (a) の根拠は確定済み。前倒しで決められます** | 基盤 × 案件 | — |
 | **CU-2** | **external ID の仮名化要否** | §2.2 | **クラウドへ出る特徴量に紐づく個人情報上の論点**。仮名化するなら採番形式そのものが変わる | **法務 / 顧客合意** | [担当範囲] C-2 |
 | **CU-3** | **デバイス撤去時の物理削除 / 論理削除** | §3.9 | 物理削除すると過去イベントの `source` が欠損し、オフロード済みデータと突合できなくなる | 基盤 | — |
 | **CU-4** | **`x_BoxParseError` と `x_Alarm_<種別>` のクリア条件** | §9.6 | **クリア条件のないアラームは永久に消えない**（§7.3） | 基盤 × 案件 | — |
@@ -2868,7 +3480,7 @@ scripts/
 
 | # | 差分 | 内容 |
 |---|---|---|
-| **α-1** | ⚠️ **BOX 全台を個別に `childAssets` へ追加する工程が必要** | 案 β は拠点あたり 2 回で済むが、**案 α は BOX の台数分すべて**。`POST /inventory/managedObjects/{siteGroupId}/childAssets`。冪等化は 409 黙殺 |
+| **α-1** | ⚠️ **BOX 全台を個別に `childAssets` へ追加する工程が必要** | 案 β は拠点あたり 2 回で済むが、**案 α は BOX の台数分すべて**。`POST /inventory/managedObjects/{siteGroupId}/childAssets`。冪等化は 409 黙殺<br>⭐ **代替**: 一括登録 CSV の **`PATH` 列**でグループ階層を自動生成できる（`ENROLLMENT_OTP` と併用可・§3.3）。**グループ作成・所属付けが 1 回の CSV 投入で済み、再実行も冪等**になるため、案 α ではこちらを検討する価値があります |
 | **α-2** | **BOXゲートウェイ本体の配置** | GW はどの拠点にも属せないため、**共通グループ（`common`）に置く**（§1.2） |
 | **α-3** | §1.3 の規約「拠点グループへの編成は main device に対してのみ」が**成立しない** | BOX（child）を個別に編成する必要があるため、**§3.10 の検査 4（CK-4）を BOX にも拡張**する |
 
@@ -2876,7 +3488,7 @@ scripts/
 
 | # | 差分 | 内容 |
 |---|---|---|
-| **α-4** | ⚠️ **GW 停止時に全拠点の BOX が同時に影響を受ける** | §5.4 の `responseInterval: 0` は前提として、**`x_BoxSilent` を EPL で拠点単位に集約する**ことを検討（§8.2 RU-5 が**必須になる**） |
+| **α-4** | ⚠️ **GW 停止時に全拠点の BOX が同時に影響を受ける** | §5.4 の `responseInterval: 32767` は前提として、**`x_BoxSilent` を EPL で拠点単位に集約する**ことを検討（§8.2 RU-5 が**必須になる**） |
 | **α-5** | ⚠️ **GW 本体のアラームがどの拠点からも見えない** | ①**Inventory ロール**: 拠点オペレーターは GW 本体を見られない ②**Notification 2.0**: 拠点グループ購読に GW 本体のアラームが乗らない → **案件アプリは GW 障害を知れない**。拠点側からは「その拠点の BOX が全部黙った」ようにしか見えない |
 | **α-6** | α-5 への手当（**追加設計が必要**） | **GW 障害を拠点オペレーター・案件アプリに伝える別経路**（EPL によるロールアップアラーム、または共通グループを購読する別サブスクリプション）を設計する |
 
@@ -2920,6 +3532,8 @@ scripts/
 - [../../IoTPlatform_cc/design-decisions.md](../../IoTPlatform_cc/design-decisions.md) — D1〜D17
 - [../../IoTPlatform_cc/vendor-questions-cumulocity.md](../../IoTPlatform_cc/vendor-questions-cumulocity.md) — V1〜V20
 - [cumulocity-iot-architecture.drawio](cumulocity-iot-architecture.drawio) — **「全体構成(配置構成・レビュー反映)」タブのみ**
+- [Cumulocity利用設計書_ファクトチェック結果.md](Cumulocity利用設計書_ファクトチェック結果.md) — **rev.2 の改訂根拠**。8 名の独立レビュアーによる一次情報照合
+- [factcheck/](factcheck/) — 各レビュアーの全文レポート（逐語引用・探索経路つき）。**`B1_externalid.md` は external ID の要否調査**
 
 ### Cumulocity Edge
 
@@ -2927,17 +3541,21 @@ scripts/
 |---|---|
 | インストール・2 テナント・TLS 要件・ライセンス・registry credentials・前提要件 | `https://cumulocity.com/docs/2026/edge/installing-edge/` |
 | **機能比較表（`Included` の一覧）・100 tps/CPU コア** | `https://cumulocity.com/docs/2026/edge/edge-introduction/` |
-| メールサーバー・外部 IP とポート一覧・`c8yedge config` | `https://cumulocity.com/docs/2026/edge/manage-edge/` |
+| メールサーバー・`c8yedge config`（**ドメイン / TLS / ライセンスの更新手順**）| `https://cumulocity.com/docs/2026/edge/manage-edge/` |
 | **バックアップとリカバリ・Prometheus メトリクスエンドポイント** | `https://cumulocity.com/docs/2026/edge/edge-operations/` |
 | **実測ベンチマーク（Narrow / Wide シナリオ）** | `https://cumulocity.com/docs/2026/edge/benchmarks/` |
 | ブランディング・Web SDK | `https://cumulocity.com/docs/2026/edge/using-edge/` |
-| **Edge CR の spec 12 項目** | `https://cumulocity.com/docs/2026/edge/edge-custom-resource-definition/` |
+| **Edge CR の spec 13 項目**（`storageClassName` は変更不可 / `mongodb…storage` は増加のみ可）| `https://cumulocity.com/docs/2026/edge/edge-custom-resource-definition/` |
 
 ### Cumulocity Core API・デバイス管理
 
 | 内容 | URL |
 |---|---|
-| **Core OpenAPI**（Notification 2.0 の RBAC バイパス・`NotificationSubscription` スキーマ・`bulkNewDeviceRequests`・`creationRamp` / `groupId` / `failedParentId`・ロール名・パスワード制約） | `https://cumulocity.com/api/core/dist/c8y-oas.yml` |
+| **Core OpenAPI**（Notification 2.0 の RBAC バイパス・`NotificationSubscription` スキーマ・`bulkNewDeviceRequests`・`creationRamp` / `groupId` / `failedParentId`・ロール名・パスワード制約・**アラーム de-duplication と suppression**・**Notification 2.0 の service quotas**・**⭐ `alarm.type.mapping`（docs サイトには記載が無く、ここだけが根拠）**） | `https://cumulocity.com/api/core/dist/c8y-oas.yml` |
+
+> ⚠️⚠️ **`cumulocity.com/api/...` の Redoc ページは、ブラウザ以外から取得すると 4KB 程度の SPA シェルしか返りません。** 「記述が無い」と誤判定する原因になります。**必ず上記の生 spec（`c8y-oas.yml`、約 1.5MB）をダウンロードして検索してください。**
+>
+> ⚠️ **本書の [確] を疑うときの作法**: 一次情報を最低 2 経路（docs の別ページ / OpenAPI 生 spec / GitHub ソース / Web 検索）で探し、**探索経路を書けるときだけ「記述が無い」と結論してください。** rev.1 に対するレビューでは、この手順を踏まなかったことによる誤判定（実際には公式に記述があるのに「無い」と判断する）が複数回発生しました。
 | **Fragment library**（`c8y_SupportedConfigurations` / `c8y_DownloadConfigFile` / `c8y_UploadConfigFile` / `c8y_RequiredAvailability`） | `https://cumulocity.com/docs/device-integration/fragment-library/` |
 | 設定管理の 3 系統 | `https://cumulocity.com/docs/device-management-application/managing-device-data/` |
 | bulk operation ウィザード | `https://cumulocity.com/docs/device-management-application/monitoring-and-controlling-devices/` |
@@ -2947,14 +3565,22 @@ scripts/
 | **Managing users**（外部認証ユーザーのパスワードリセット不可） | `https://cumulocity.com/docs/standard-tenant/managing-users/` |
 | **Monitoring**（Notification 2.0 のトピック名・サブスクライバのライフサイクル・unsubscribe） | `https://cumulocity.com/docs/standard-tenant/monitoring/` |
 | Managing data / Ecosystem | `https://cumulocity.com/docs/standard-tenant/managing-data/` , `/standard-tenant/ecosystem/` |
-| Smart rules / **Alarm mapping** | `https://cumulocity.com/docs/cockpit/smart-rules/` , `/standard-tenant/alarm-mapping/` |
+| Smart rules / **Alarm mapping（前方一致の挙動）** | `https://cumulocity.com/docs/cockpit/smart-rules/` , `/standard-tenant/alarm-mapping/` |
+| **スマートルールのプリセット全 11 種**（時限自動クリアが無いことの根拠） | `https://cumulocity.com/docs/cockpit/smart-rules-collection/` |
+| **SmartREST static templates**（117 は既存値を上書きしない・305/306） | `https://cumulocity.com/docs/smartrest/mqtt-static-templates/` |
+| **MQTT device integration**（ClientId 形式・**コロンは deviceIdentifier に使用不可**） | `https://cumulocity.com/docs/device-integration/mqtt/` |
+| **Streaming Analytics introduction**（Apama-ctrl バリアントごとの機能差） | `https://cumulocity.com/docs/streaming-analytics/introduction-analytics/` |
+| **Event file binary attachment retention rules（KB）** — 添付にもリテンションが及ぶ | `https://community.cumulocity.com/t/event-file-binary-attachment-retention-rules/14387` |
 
 ### thin-edge.io（バージョン 2.0.1）
 
 | 内容 | URL |
 |---|---|
-| **エンティティ管理**（MQTT API / REST API / 自動登録の無効化 / `@id`） | `https://thin-edge.github.io/thin-edge.io/operate/entity-management/` |
-| **MQTT API リファレンス**（`te/` トピック体系・retain / QoS 要件・ペイロード規約） | `https://thin-edge.github.io/thin-edge.io/references/mqtt-api/` |
+| **エンティティ管理** ⚠️ 親ページはカテゴリ索引のみ。実体は子ページ（**アンダースコア表記に注意**） | `…/operate/entity-management/auto-registration/`（自動登録の無効化）, `…/operate/entity-management/mqtt_api/`（`@id`）, `…/operate/entity-management/rest_api/` |
+| **MQTT API リファレンス**（`te/` トピック体系・retain・ペイロード規約） | `https://thin-edge.github.io/thin-edge.io/references/mqtt-api/` |
+| ⚠️ **QoS 要件とアラームの一意性（型 + severity）の逐語根拠は別ページ**（`references/mqtt-api/` に QoS の記述は無い） | `https://thin-edge.github.io/thin-edge.io/start/raise-alarm/` |
+| **Thin Edge JSON**（`time` はローカル受信時に thin-edge が付与） | `https://thin-edge.github.io/thin-edge.io/understand/thin-edge-json/` |
+| **Remote access**（`PASSTHROUGH` で任意 TCP・表示 3 条件） | `https://thin-edge.github.io/thin-edge.io/operate/c8y/remote-access/` |
 | **Cumulocity マッパー**（supported operations の完全リスト） | `https://thin-edge.github.io/thin-edge.io/references/mappers/c8y-mapper/` |
 | **Builtin mapping rules**（`max_payload_size` の逐語根拠） | `https://thin-edge.github.io/thin-edge.io/references/mappers/builtin-flows/` |
 | Supported Operations（child は動的削除不可） | `https://thin-edge.github.io/thin-edge.io/operate/c8y/supported-operations/` |
@@ -2965,14 +3591,18 @@ scripts/
 | ファイルアップロード（`tedge upload c8y`） | `https://thin-edge.github.io/thin-edge.io/operate/c8y/upload-files/` |
 | **証明書管理**（EST / 自動更新 / `minimum_duration`） | `https://thin-edge.github.io/thin-edge.io/references/certificate-management/` |
 | クラウド認証・CA 配置（**Edge は自己署名証明書**） | `https://thin-edge.github.io/thin-edge.io/operate/security/cloud-authentication/` |
-| sm-plugin API（ロールバックなし・5 分タイムアウト） | `https://thin-edge.github.io/thin-edge.io/references/software-management-plugin-api/` |
-| 設定管理（ロールバックなし） | `https://thin-edge.github.io/thin-edge.io/references/agent/tedge-configuration-management/` |
+| sm-plugin API（**ロールバックはプラグイン責務**・**5 分タイムアウト**） | `https://thin-edge.github.io/thin-edge.io/references/software-management-plugin-api/` |
+| 設定管理 ⚠️ **このページには「rollback (on error)」が**ある**（2.0 の新機能）** | `https://thin-edge.github.io/thin-edge.io/references/agent/tedge-configuration-management/` |
+| ⚠️ **「ロールバックなし」の逐語根拠はこちら**（file プラグイン経由の場合） | `https://thin-edge.github.io/thin-edge.io/extend/config-management/` |
 
 > ⚠️ **thin-edge.io の設定値を確認するときは、実機で `tedge config list --doc` を正としてください。** 公式ドキュメントには既知の不備があります（[担当範囲] §12 参照）。
 
+> ⚠️⚠️ **上記の thin-edge URL はすべてバージョン無しパスです。** 参照時点（2026-08-20）のヘッダ表示は `Version: 2.0.1` ですが、`/2.0.1/` の permalink は 404 で、アーカイブは `1.7.1` と `next` しかありません。**2.1 がリリースされると、同じ URL の内容が変わります。** 版差が効く記述（設定キー・既定値・ロールバックの有無など）を引用するときは、**参照日を併記**してください。
+
 ### ツール
 
-- [go-c8y-cli](https://goc8ycli.netlify.app/docs/) — 全設定投入の主力
+- [go-c8y-cli](https://goc8ycli.netlify.app/docs/) — 全設定投入の主力。⚠️ **GitHub の既定ブランチは `master` ではなく [`v2`](https://github.com/reubenmiller/go-c8y-cli/tree/v2)**。`master` を見てコマンドの実在を判定すると誤ります（コマンド定義は `api/spec/json/*.json`、ただし manual 実装のコマンドはそこに無い）
+- [go-c8y-cli settings](https://goc8ycli.netlify.app/docs/configuration/settings/) — `session.mode`（**既定は `prod`＝読取専用**）
 - [c8y users resetUserPassword](https://goc8ycli.netlify.app/docs/cli/c8y/users/c8y_users_resetuserpassword/) — *"you can't set a fixed password for another user"*
 
 ---
@@ -2982,3 +3612,21 @@ scripts/
 | 版 | 日付 | 内容 |
 |---|---|---|
 | rev.1 | 2026-08-20 | 初版。[担当範囲] をベースに、Cumulocity 側設計を概念軸で再構成。[設定書] §4「主要設計の詳細」を本書へ移管（§0.3）。案 β 前提・案 α は付録 A |
+| **rev.2** | **2026-08-21** | **一次情報照合（ファクトチェック）の反映**。8 名の独立レビュアーが約 350 件の事実主張と出典 URL 39 件を Cumulocity 公式 docs / Core OpenAPI 生 spec / thin-edge.io ソース / go-c8y-cli ソースと逐語照合。**設計変更を伴う修正 7 件**（下表）ほか、確度記号の格上げ 23 件・出典の修正 6 件。詳細は [ファクトチェック結果](Cumulocity利用設計書_ファクトチェック結果.md) |
+
+#### rev.2 の主な設計変更
+
+| # | 章 | rev.1 の記述 | rev.2 での訂正 |
+|---|---|---|---|
+| 1 | §11.2 | 拠点オペレーター／業務閲覧者に `Alarms` / `Events` / `Inventory` を**グローバルロール**で付与 | **グローバルのデータ系権限は拠点分離を無効化する**（*"all the alarms on the tenant are returned"*）。データ系は Inventory ロール経由に一本化 |
+| 2 | §5.4 | child device は**メンテナンスモード**（`responseInterval: 0`）へ落とす | **メンテナンスモードはそのデバイスの全アラームを抑止する**。`x_CameraDown` も出なくなるため、**十分長い正値（32767）**に変更 |
+| 3 | §5.4 / §3.8 | `c8y_RequiredAvailability` は「thin-edge が正。Cumulocity 側から書くと上書きされる」 | **逆。SmartREST 117 は既存値を上書きしない**。**Cumulocity 側を正**に変更し、初回接続前に投入する手順を追加 |
+| 4 | §9.2 | `x_Alarm_<種別>` は種別ごとに個別キーが必要 | **アラーム型は前方一致**。1 キーで全種別に効く一方、**短いキーは意図しない型まで抑止する**（AM-a〜AM-c を追加） |
+| 5 | §3.7 | 10/2 の CA 更新で**全拠点のデバイス証明書が同時失効**する | **失効しない**（*"existing device certificates remain valid until their expiration"*）。リスクを「**初回エンロール日の集中**」に付け替え |
+| 6 | §12.2 | ドメイン・TLS・ライセンスは install 後に**変更できない** | **変更できる**。真に不可逆なのは `storageClassName` のみ。**Edge TLS 証明書の更新手順を §12.5 に追加** |
+| 7 | §10.5 | 通知バックログは**ディスク逼迫**の経路 | **25 MiB の Hard quota に達すると、その拠点のアラーム・イベント POST が 500 で失敗**する。監視手段は公式 UI にあり（SV-33 解消） |
+| 8 | §1.4 / §2.2 / §13.3.3 | 拠点グループにも external ID を振る。main device の external ID は `site001:ANLZ-…` | **グループの external ID は廃止**（`x_Site.siteId` を同定キーに）。**main device はコロンが使えない**（証明書 CN 制約）ため `site001-ANLZ-…` に変更。**グループ作成の「409 黙殺」は誤り**（`POST /inventory/managedObjects` は 409 を返さず、再実行で重複グループが生える） |
+
+**併せて訂正した誤り**: §8.2 RU-2（時限自動クリアのスマートルールは存在しない）、§6.9 TM-d（時刻を付けるのは Cumulocity ではなく thin-edge・ローカル受信時）、§6.8 制約 1（既存イベントへの後付け添付は可能）、§2.8 CK-1（`GET /identity/externalIds` は存在しない）、§13.1 CF-c（`prod` はエラーで落ちる。既定が `prod`）、§11.4（ユーザー ID は変わらない。変わるのはパスワード）、§5.9 / §7.7（Wide シナリオは本構成に直撃しない）。
+
+**rev.1 が正しかったことを確認した主な項目**: §1.4 の `subscription` 名パターン `^[a-zA-Z0-9]+$`、§3.6 の go-c8y-cli コマンド 3 種、§2.6 の `entity_store.auto_register` 両キー、§7.7 の「約 100 tps/CPU コア」、§4.8 の `creationRamp`、§5.2 の `responseInterval` 値域、§10.3 の RBAC バイパス。
