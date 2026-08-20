@@ -281,7 +281,9 @@ Inventory ロールの継承経路                    └── BOX ×M    ←�
 | **Cumulocity 自身はどうしているか** | **名前ベースで冪等生成しています。** bulk device registration の `PATH` 列で自動生成されるグループに **external ID は付きません** |
 | **go-c8y-cli はどうしているか** | 内部のグループ解決も `has(c8y_IsDeviceGroup) and name eq '<name>'` のクエリです |
 
-**やめる利点**: 同じ実体に「external ID」と「`x_Site.siteId`」という 2 つの同定キーが並ぶ状態（second source of truth）を解消できます。両方あると、片方だけ直した投入スクリプトが静かに別グループを作ります。
+**やめる利点**: ①同じ実体に「external ID」と「`x_Site.siteId`」という 2 つの同定キーが並ぶ状態（second source of truth）を解消できます。両方あると、片方だけ直した投入スクリプトが静かに別グループを作ります。②**投入が 1 ステップで済み、孤児 MO が発生しません**（§13.5）。
+
+> ⚠️ **external ID を振っても「重複が防げる」わけではありません。** Edge（Release 2026 API）には**原子的な「external ID 付き MO 作成」がありません**。`POST /inventory/managedObjects`（重複チェック無し）→ `POST /identity/globalIds/{id}/externalIds`（409 あり）の **2 ステップ**になるため、**①が成功して②が 409 で落ちると external ID を持たない孤児 MO が残ります**（§13.5）。**「external ID があるから冪等」は成立しません。**
 
 > ⚠️ **グループ名は一意ではありません。** 「名前だけで参照すると再実行で重複グループが生える」という rev.1 の懸念自体は正しく、**同名グループは作れてしまいます**（`POST /inventory/managedObjects` は 409 を返しません → §13.5）。**したがって同定キーは必要で、それを `x_Site.siteId` にする**という変更です。「同定キーを無くす」ではありません。
 
@@ -538,6 +540,7 @@ curl -X POST http://127.0.0.1:8000/te/v1/entities -H 'Content-Type: application/
 | **CK-1a** | **main device** の external ID が **`^[a-z0-9]+-(ANLZ\|GW)-.+$`** に適合（**コロンを含まない**こと・X-f） | ⚠️ **`GET /identity/externalIds` は存在しません**（下記）。`GET /inventory/managedObjects?fragmentType=c8y_IsDevice` で MO を列挙 → 各 MO に `GET /identity/globalIds/{id}/externalIds` | CI 失敗 |
 | **CK-1b** | **child device** の external ID が **`^[a-z0-9]+:(CAM\|BOX)-.+$`** に適合 | 同上 | CI 失敗 |
 | **CK-1c** 〈rev.2〉 | **全拠点グループに `x_Site.siteId` があり、値が重複していない**（external ID を廃止したため、これが同定キー・§1.4） | `GET /inventory/managedObjects?fragmentType=c8y_IsDeviceGroup` | CI 失敗 |
+| **CK-1d** 〈rev.2〉 | ⭐ **孤児 MO の検出** — `c8y_IsDevice` を持つ MO で **external ID が 1 つも紐づいていないものが無い**こと | 同上（CK-1a/b と同じ走査で判定できる） | CI 失敗。**REST 経由の 2 ステップ登録が途中で失敗した痕跡**（§13.5） |
 | **CK-2** | 全デバイスの `type` が 4 種のいずれか | `GET /inventory/managedObjects?fragmentType=c8y_IsDevice` | CI 失敗 |
 | **CK-3** | 全 `x_Camera` に `vmsCameraId` が設定されている | 同上 | CI 失敗 |
 | **CK-4** | 全 main device が**いずれかの拠点グループの `childAssets`** に入っている | グループを走査して差集合を取る | CI 失敗 |
@@ -637,6 +640,8 @@ curl -X POST http://127.0.0.1:8000/te/v1/entities -H 'Content-Type: application/
 | 6 | child の `c8y_RequiredAvailability = {"responseInterval": 32767}` 設定 | 実質無効化（§5.4）。⚠️ **`0` にしない** | ○ |
 | 7 | `x_Site` / `x_SensingBox` フラグメントの設定 | §2.4 のとおり | ○ |
 | 8 | supported operations の確認 | **child には何も出ていない**（§4.3） | — |
+
+> ⚠️⚠️ **手順 2〜4 で MO を作る箇所は、必ず「作成前に存在確認」してください。** `POST /inventory/managedObjects` には重複チェックがなく、`POST /identity/globalIds/{id}/externalIds` だけが 409 を返すため、**順に叩くと external ID を持たない孤児 MO が残ります**（§13.5）。なお **main device は thin-edge の接続時に Cumulocity 側が find-or-create するため、プロビジョニングツールが MO を作る必要はありません**（SmartREST 100）。
 
 > ⚠️⚠️ **手順 6 は「手順 4 の直後・thin-edge の初回接続より前」に実行してください。** SmartREST 117 は既存値を上書きしませんが、**先に入っていた値が勝つ**ため、thin-edge が先に 60 分を書いてしまうと以後どれだけ設定しても変わりません（§5.5）。**プロビジョニングツールの実行順序が結果を決めます。**
 
@@ -2880,6 +2885,8 @@ sudo c8yedge config --set-file tlsSecret.tls.key=<path-to-key> \
 > ```
 >
 > ⚠️ **`--force` は upsert ではありません**（*"Do not prompt for confirmation"* の意味）。go-c8y-cli に upsert / sync 系のコマンドはありません。
+>
+> ⚠️ **`x_Site` を「作成後に UPDATE で付ける」のもやめてください。** 作成と同定キー付与が 2 ステップに分かれると、UPDATE が失敗したときに**同定キーを持たない孤児グループ**が残り、次回実行でさらにもう 1 つ作られます。**`c8y inventory create` の本文に `x_Site` を含めて 1 ステップにしてください**（§13.5）。
 
 **拠点定義ファイルの例**（`config/site/sites/site001.yaml`）:
 
@@ -3139,6 +3146,56 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
 
 ### 13.5 冪等化パターンの割り当て
 
+#### ⭐ 前提: どの API が重複を弾くか 〈rev.2 で追加〉
+
+**冪等化パターンの選択は、この表がすべての根拠です。** API ごとに挙動が正反対なので、思い込みで選ばないでください。
+
+| API | 重複チェック | 根拠（Release 2026 OpenAPI） | 確度 |
+|---|---|---|---|
+| **`POST /inventory/managedObjects`** | ❌ **無い** | 応答定義は **`201` / `401` / `403` / `422` のみ**。**同じ `name` / `type` / フラグメントの MO をいくつでも作れます** | [確] |
+| **`POST /identity/globalIds/{id}/externalIds`** | ✅ **ある（409）** | *"**409**: Duplicate – Identity already bound to a different Global ID."* — **(`type`, `externalId`) がユニークキー** | [確] |
+| **`POST .../{id}/childAssets`** | ✅ **ある（409）** | 応答定義には無いが、go-c8y-cli 公式例が *"silence 409 (duplicate) errors"* と明示 | [確] |
+| **`POST /user/inventoryroles`** | ✅ **ある（409）** | 409 "Duplicate" | [確] |
+| **`POST /devicecontrol/newDeviceRequests`** | ❌ **無い** | `201` / `401` / `403` / `422` のみ | [確] |
+| **SmartREST `100`（MQTT のデバイス作成）** | ✅ **ある（find-or-create）** | *"Create a new device for the serial number in the inventory **if not yet existing**. An externalId for the device with type `c8y_Serial` and the device identifier of the MQTT clientId as value will be created."* | [確] |
+
+> ⚠️⚠️ **原子的な「external ID 付き MO 作成」は Edge 2026 では使えません** [確]。
+>
+> **これは製品の違い（Edge か否か）ではなく、バージョンの差です。** Cumulocity の API 仕様は版ごとに公開されており、**`Latest version`（継続更新チャネル）の spec には `managedObjectCreate.externalIds` があります**。次のように**作成と external ID の紐づけが原子的**になります:
+>
+> > *"External identifiers can be assigned to managed objects upon creation by specifying a list in `externalIds` field. Given external identifiers must be valid and **not be already assigned to another managed object** or the request to create a single or multiple managed objects will **fail with a client error and not create anything**."*
+>
+> **しかしこのフィールドは Release 2026 / 2025 の OpenAPI には存在しません**（`externalIds` / `not be already assigned to another managed object` のいずれも 0 件。`Latest version` のみ 1 件。3 版を実際に取得して比較）。
+>
+> **Edge 2026 が使うのは Release 2026 です** [確]: *"Cumulocity Edge release 2026 uses the **Cumulocity platform release 2026**."* / *"Edge uses the **same software** as Cumulocity platform … the base software is the same, there are differences regarding the **activated optional features and pre-installed agents**."*
+>
+> **つまり「Edge だから機能が削られている」のではなく、単に Release 2026 の時点でこのフィールドがまだ無いだけです。** Edge が将来 `externalIds` を含む版へ上がれば使えるようになります（そのとき §13.5 の 2 ステップ問題は消えます）。**現時点では使えない前提で設計してください**（CU-15）。
+>
+> ⚠️ **[要] spec に無いことは実装に無いことの強い証拠ですが、同一ではありません。** 検証環境の Edge で `externalIds` 付きの `POST /inventory/managedObjects` を 1 度試し、無視されるか 422 になるかを確認しておくと確実です。
+
+#### ⚠️⚠️ 帰結 — REST 経由の MO 作成は「重複」ではなく「孤児」を生みます
+
+Edge では external ID 付きの MO 作成が **2 ステップ**になります。ここに落とし穴があります。
+
+```
+① POST /inventory/managedObjects            → 201（重複チェックが無いので必ず成功し、MO ができる）
+② POST /identity/globalIds/{id}/externalIds → 409（その external ID は既に別の MO に bound）
+```
+
+**①が成功して②が失敗するため、external ID を持たない MO が残ります。** 再実行のたびに孤児が増え、しかも **②の 409 を「冪等だから」と黙殺する実装では気づけません。**
+
+| 経路 | 再実行したときに起きること |
+|---|---|
+| **デバイス（thin-edge / MQTT）** | ✅ **安全**。SmartREST 100 が external ID をキーに find-or-create する。再接続しても重複しない |
+| **プロビジョニングツール（REST・external ID を使う）** | ⚠️ **孤児 MO が増える**（上記） |
+| **プロビジョニングツール（REST・`x_Site.siteId` を使う）** | ⚠️ **重複 MO が増える**。ただし作成が 1 ステップなので**孤児にはならず**、CK-1c で検出できる |
+
+> **[判] REST で MO を作る箇所は、例外なく「作成前に存在確認」してください**（パターン C）。**409 黙殺（パターン E）を MO の作成に使ってはいけません。** 409 黙殺が有効なのは、上表で ✅ が付いている **childAssets 追加・Inventory ロール・アプリ購読**だけです。
+>
+> **[判] `x_Site.siteId` を同定キーにする**（§1.4）と、作成が 1 ステップに収まるため孤児が発生しません。**これがグループの external ID を廃止したもう 1 つの理由です。**
+
+> ⚠️ **存在確認 → 作成には TOCTOU レースが残ります。** プロビジョニングツールを**同一拠点に対して並列実行しない**こと（拠点間の並列は問題ありません）。CI では拠点ごとに排他制御してください。
+
 | パターン | 内容 | 適用先 |
 |---|---|---|
 | **A: 名前ベース参照** | `--group` / `--role` がワイルドカードを受ける | ロール割当（R-01〜R-03, R-10） |
@@ -3379,7 +3436,7 @@ scripts/
 | **CU-8b** | `allow.origin` がスキーム・ポートを含む表記を受け付けるか | §11.8 | 低 |
 | **CU-14** | パスワード有効期限はテナント単位。「管理者だけ無期限」は実装不能 | §11.5 / §13.3.4 | 低 |
 | **SV-14b** | child device 台数の別軸評価（MO 総数・課金・クエリ性能） | §7.7 | 中 |
-| **CU-15** 〈rev.2〉 | MO 作成時の `externalIds` バインド（原子的な冪等化）と `POST /identity/search` が **Edge の core API 版で使えるか**（Release 2025 / 2026 の spec に無く、SaaS の 2026 年追加機能の可能性） | §13.3.3 | 中 |
+| ~~**CU-15**~~ 〈rev.2 でほぼ解決〉 | **Edge 2026 では使えません** [確]。`managedObjectCreate.externalIds` と `/identity/search` は **`Latest version` の spec にのみ存在**し、**Release 2026 / 2025 の spec には 0 件**。**Edge 2026 = platform Release 2026** なので、**原子的な冪等化は使えない前提**で設計する。⚠️ **製品差ではなく版差**なので、Edge の版が上がれば使えるようになる（§13.5） | §13.5 | 低（実機で 1 度確認） |
 | **CU-16** 〈rev.2〉 | 実テナントで**同名グループを 2 件作れる**ことの実測（OpenAPI 仕様からの推論） | §13.3.3 | 中 |
 | **TE-5b** | 既存拠点の `c8y_RequiredAvailability` 一括置換手順 | §5.5 | 中 |
 

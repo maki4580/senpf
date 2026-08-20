@@ -452,6 +452,40 @@ A1-15 の指摘（§3 の F-12）が、証明書 CN 側の逐語根拠でも裏�
 
 **§1.4 の「1 つの値で通せる」は [確] ではなく [判] です。** 実務上は推奨できますが、「そうしないと動かない」という書き方は誤りでした。
 
+### 追補: MO 登録 API は重複チェックをしているか
+
+**API ごとに挙動が正反対で、しかも API のバージョンによって差があります。**
+
+| API | 重複チェック | 根拠（Release 2026 OpenAPI） |
+|---|---|---|
+| `POST /inventory/managedObjects` | ❌ **無い** | 応答定義は `201`/`401`/`403`/`422` のみ |
+| `POST /identity/globalIds/{id}/externalIds` | ✅ **409** | *"Duplicate – Identity already bound to a different Global ID."* |
+| `POST .../{id}/childAssets` | ✅ **409** | go-c8y-cli 公式例が `silentStatusCodes` で黙殺している |
+| `POST /user/inventoryroles` | ✅ **409** | "Duplicate" |
+| `POST /devicecontrol/newDeviceRequests` | ❌ **無い** | `201`/`401`/`403`/`422` のみ |
+| SmartREST `100`（MQTT） | ✅ **find-or-create** | *"Create a new device for the serial number in the inventory **if not yet existing**."* |
+
+**⚠️ 原子的な「external ID 付き MO 作成」は Edge 2026 では使えません。** **`Latest version`**（Release 2026 より新しい継続更新チャネル）の spec には `managedObjectCreate.externalIds` があり、
+
+> *"Given external identifiers must be valid and **not be already assigned to another managed object** or the request … will **fail with a client error and not create anything**."*
+
+**しかし Release 2026 / 2025 の spec には 0 件です**（`Latest version` のみ 1 件。3 版を実際に取得して grep で確認）。
+
+**これは製品差ではなくバージョン差です** [確]: *"Cumulocity Edge release 2026 uses the **Cumulocity platform release 2026**."* / *"Edge uses the **same software** as Cumulocity platform … differences regarding the **activated optional features and pre-installed agents**."* つまり「Edge だから削られている」のではなく、Release 2026 の時点でまだ無いだけで、**Edge の版が上がれば使えるようになります**。CU-15 はこれで決着しました（spec ≠ 実装なので、検証環境で 1 度だけ実挙動を確認すると確実）。
+
+**帰結 — REST 経由の MO 作成は「重複」ではなく「孤児」を生みます。**
+
+```
+① POST /inventory/managedObjects            → 201（重複チェックが無いので必ず成功）
+② POST /identity/globalIds/{id}/externalIds → 409（既に別の MO に bound）
+```
+
+①が成功して②が失敗するため、**external ID を持たない MO が残ります**。②の 409 を「冪等だから」と黙殺する実装では気づけません。これは「グループが重複する」より追いにくい壊れ方です。
+
+一方 **デバイス側（thin-edge / MQTT）は安全**です。SmartREST 100 が external ID をキーに find-or-create するため、再接続で重複しません。**壊れるのは REST を叩くプロビジョニングツールの経路だけ**です。
+
+→ 文書には §13.5 に仕様表と帰結、§2.8 に **CK-1d（孤児 MO の検出）**、§3.5・§13.3.3 に「作成前に存在確認」を追記しました。
+
 ### 副次的に確定したこと
 
 - **TE-6（external ID の文字種・長さ）は実機確認不要** — Identity API 側は `pattern` / `minLength` / `maxLength` の定義が一切なく**無制約**。制約が効くのは main device の証明書 CN 経路だけ
