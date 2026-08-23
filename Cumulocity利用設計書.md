@@ -3,7 +3,7 @@
 **— 本構成における Cumulocity Edge の使い方の定義と、その設定への落とし込み —**
 
 **対象構成**: [cumulocity-iot-architecture.drawio](cumulocity-iot-architecture.drawio) —「全体構成(配置構成・レビュー反映)」タブ**のみ**
-**版**: **rev.2（2026-08-21）** — 一次情報照合（ファクトチェック）の反映。[レビュー結果](Cumulocity利用設計書_ファクトチェック結果.md) / [詳細レポート](factcheck/)
+**版**: **rev.4（2026-08-23）** — **バックアップ設計の完成**（CU-33 / CU-30 の推奨設計・取得/復元 runbook・K3s / CA の一次情報補強 — §12.6）と、**運用設計の新設**（§12.10 — 3 文書横断のカバレッジ調査で判明した欠落: Edge アップグレード・計画停止・ホスト OS・しきい値・棚卸し・監査レビュー・Keycloak 依存ほか）。rev.3 は個人情報を含むスナップショット画像のアクセス監査（前提 9 / CU-18）、rev.2 は一次情報照合（ファクトチェック）の反映。[レビュー結果](Cumulocity利用設計書_ファクトチェック結果.md) / [詳細レポート](factcheck/)
 **位置づけ**: **Cumulocity 側設計の「正」**。本構成において Cumulocity Edge を「何のためにどう使うか」を Cumulocity の概念軸（グループ / デバイス / データ種別 / ルール / 通知 / ロール / テナントオプション）で定義し、その定義を Cumulocity Edge の**設定項目・設定手段・設定値**へ落とすところまでを一冊で担う
 **ベース文書**: [IoT連携チーム_担当範囲設計書.md](IoT連携チーム_担当範囲設計書.md)（以下 **[担当範囲]**）
 **前提**: 外部Gateway の配置は**案 β**（拠点ごとに thin-edge インスタンスを分ける・[担当範囲] §2.5）。案 α を採る場合の差分は**付録 A**
@@ -131,8 +131,11 @@
 | **前提 6** 〈rev.2〉 | Edge 同梱の Apama-ctrl で **EPL Apps が使える** | **§8 の RL-b・RU-2〜RU-5 が全て EPL 前提。§8 の過半が成立しない** | **SV-45（最優先）** |
 | **前提 7** 〈rev.2〉 | Inventory ロールが **`childDevices`（カメラ・BOX）まで継承される** | **拠点 Manager がカメラ個別のアラーム・インベントリを見られず §11.3 が崩れる**。前提 2 と同型 | **SV-47（最優先）** |
 | **前提 8** 〈rev.2〉 | リテンションの「既定 60 日」が**削除可能なルールとして存在する** | **システム設定側の値なら、90 日ルールを入れても 60 日で消える。§7.2 が崩れる** | **SV-43（最優先）** |
+| **前提 9** 〈rev.3〉 | スナップショット画像を **Cumulocity イベント添付に置いたままでよい**（＝画像アクセスの監査証跡が要件にならない） | **画像が個人情報を含み監査証跡が要件になる場合、参照は監査ログに残らず（§6.8 制約 5）権限分離もできない（制約 6）。§6.8 の初期版設計・§11.3 のロール割当・§13 の投入対象・構成図が変わる** | **CU-18**（⚠️ 実機不要なのは (A)/(A′)/(C) のみ。**(D)/(B) の評価には CT-5c が要る**） |
 
 > ⚠️ **前提 2・3・6・7・8 は「検証環境で最初に潰す」項目です。** 本書の設計を本番へ投入する前に、[担当範囲] W1-2 / W1-3 / W1-10 を完了させてください。
+
+> ⚠️ **前提 9 は性質が違います** 〈rev.3〉。技術的な未確認ではなく **案件・法務との合意事項**です。ただし **5 案のうち (D)/(B) は CT-5c（Edge 導入後の検証環境）の結果が無いと評価できない**ため、「合意だけ先に取る」ことができません。**W0 で (A)/(A′)/(C) の可否を詰め、(D)/(B) を残すなら CT-5c を §12.4 直後に前倒ししてください**（§13.4）。
 
 > ⚠️⚠️ **rev.2 で前提が 3 つ増えました。** いずれも rev.1 が [確] としていた（あるいは疑問にすら上がっていなかった）事項が、一次情報照合で未確認と判明したものです。**前提 2 と前提 7 は「グループやデバイスの配下をどこまで辿るか」という同一の疑問**であり、**同じ階層構成で同時に検証してください**（§14 CT-4）。
 
@@ -156,7 +159,7 @@
   §11 ロール・アクセス制御 ── 誰に何を見せるか
 
 実装（どう設定するか）
-  §12 Cumulocity Edge セットアップ
+  §12 Cumulocity Edge セットアップ・運用設計（バックアップ §12.6 / 監視 §12.7 / 定常運用 §12.10）
   §13 Cumulocity 設定設計 ← §1〜§11 の定義を設定項目に落とす
 
 確認
@@ -546,10 +549,16 @@ curl -X POST http://127.0.0.1:8000/te/v1/entities -H 'Content-Type: application/
 | **CK-4** | 全 main device が**いずれかの拠点グループの `childAssets`** に入っている | グループを走査して差集合を取る | CI 失敗 |
 | **CK-5** | external ID のプレフィックス `{siteId}` と、実際に所属する拠点グループが一致 | 同上 | ⚠️ **BOXアダプタの誤配送を検出できる唯一の手段**（§6.2） |
 | **CK-6** | `ROLE_NOTIFICATION_2_ADMIN` が §11.4 の指定ユーザー以外に付いていない | `GET /user/{t}/groups` + `/users` | CI 失敗 |
+| **CK-8** 〈rev.3〉 ⚠️ **CU-18 で案 (D) を採る場合のみ有効** | ⭐ **スナップショットのバイナリ MO の隔離検査**（§15.3 案 (D) の成立条件を維持する）<br>**(a)** **`type` が画像用の値**（§13.3.9 の名前空間規約）のバイナリ MO が、**どの拠点グループの `childAssets` にも入っていない**こと<br>**(b)** ⚠️ **グローバルの `ROLE_BINARY_READ` / `ROLE_BINARY_ADMIN` / `ROLE_INVENTORY_READ` / `ROLE_INVENTORY_ADMIN` を持つ主体が、R-14 と（実体確認後の）R-01 だけであること** — 検査対象は **R-01 / R-02 / R-03 / R-05 / R-06a / R-06b / R-08 / R-10 / R-11 / R-12**〈rev.3 レビューで対象拡大〉 | **(a)** 拠点グループを走査して `childAssets` に画像バイナリ MO が無いことを確認（CK-4 の逆向き）<br>**(b)** `GET /user/{t}/groups` + `GET /user/roles` でロールの実体を展開して照合 | CI 失敗。⚠️ **どちらか一方でも崩れると「イベントは見えるが画像は 403」が静かに破れます** |
 
 > ⚠️⚠️ **`GET /identity/externalIds`（コレクション取得）は存在しません** [確]。Identity API のパスは 4 本だけです — `/identity`、`/identity/search`、`/identity/globalIds/{id}/externalIds`、`/identity/externalIds/{type}/{externalId}`。**rev.1 の CK-1 は実装不能でした。** さらに inventory クエリの `has()` は `externalIds` を明示的に除外しているため、**「全 MO 列挙 → 各 MO に N+1 で問い合わせ」以外の実装方法がありません。** MO 数が多いので、CI での実行時間を見積もってください。
 
-> ⚠️ **CK-6 は §11.7 AX-1 と同じ検査です。** 併せて **AS-4（`ROLE_REMOTE_ACCESS_ADMIN` が誰にも付いていないこと）** と **CK-7（アラーム型が他のマッピングキーの前方一致に該当しないこと・§9.2 AM-a）** も CI に載せてください。
+> ⚠️ **CK-6 は §11.7 AX-1 と同じ検査です。** 併せて **AS-4（`ROLE_REMOTE_ACCESS_ADMIN` が誰にも付いていないこと）**・**AS-13（`ROLE_AUDIT_ADMIN` が人間ユーザーに付いていないこと・§11.2）**・**CK-7（アラーム型が他のマッピングキーの前方一致に該当しないこと・§9.2 AM-a）** も CI に載せてください。
+
+> ⚠️ **CK-8(a) が実際に守る相手は「admin 級のロールを持つ主体」です** 〈rev.3 で追加〉。
+> `POST /inventory/managedObjects/{id}/childAssets` の Required roles は *"`ROLE_INVENTORY_ADMIN` **OR** `ROLE_MANAGED_OBJECT_ADMIN` **OR** ((owner of the source **OR** `MANAGE_OBJECT_ADMIN` permission on the source) **AND** (owner of the child **OR** `MANAGE_OBJECT_ADMIN` permission on the child))"* [確]。
+>
+> **child（バイナリ MO）側の条件を拠点 Manager は満たせない**ため、**「拠点 Manager が自力で画像を自グループにぶら下げる」経路は塞がっています。** CK-8(a) が想定すべき相手は **R-01 / R-06b / R-08 / R-10** です。**この AND 条件を知らないと、CK-8(a) の重みと (b) の深刻さを取り違えます。**
 
 > ⚠️ **CK-1〜CK-3 は「壊れても長期間気づけない」種類の破綻です。** 手で 1 台登録すると、その拠点だけ external ID の規約が崩れ、重複排除・映像突合・特徴量紐づけの三重の役割が**静かに**壊れます。**検査を CI に載せることが唯一の歯止めです。**
 
@@ -1554,7 +1563,9 @@ thin-edge 側もこれに合わせています（`tedge_config.rs` の `C8Y_MQTT
 | **制約 2** | **1 イベント 1 バイナリ**（2 件目は HTTP 409） |
 | ⚠️ **制約 3** | **網断耐性なし**。HTTP 経路は**ストア&フォワードの対象外**。**発行側のローカルスプールが必須** |
 | ⚠️ **制約 4** | c8y-proxy は *"requests to the proxy API are occasionally spuriously rejected with a `401 Not Authorized` status code"* [確] → **リトライを実装規約に入れる** |
-| **将来** | オブジェクトストレージ本体 + サムネイル添付へ移行（構成図の配置の要点） |
+| ⚠️⚠️ **制約 5** 〈rev.3〉 | **添付画像の「参照・ダウンロード」は監査ログに残りません** [確]。Cumulocity の監査ログが記録するのは *"security-relevant operations a user has processed"* で、**その対象操作は公式ドキュメントの「Audit log types」表に列挙されており、イベント添付・バイナリの取得はそこに含まれていません**。⚠️ **「参照はいっさい監査されない」わけではありません** — 同じ表に `Report` → *"Test tenant statistics accessed"* / *"Real tenant statistics accessed"* があり、**Cumulocity は一部の参照操作を監査しています**。**画像取得 API がその一覧に無い**、というのが制約 5 の正確な内容です。**Edge 固有の制限ではなくプラットフォーム共通です**（共通 docs に Edge 例外の記述が無いことによる） |
+| ⚠️⚠️ **制約 6** 〈rev.3〉 | **添付の取得権限をイベント閲覧権限から分離できません** [確]。`GET /event/events/{id}/binaries` の Required roles は *"ROLE_EVENT_READ **OR** EVENT_READ permission on the source"* で、**イベント本体の参照とまったく同じ**です。**§11.3 の R-04a / R-04b（Events READ）を持つ利用者は、UI を経由せず REST で直接スナップショットを取得できます**（→ **CT-5b**） |
+| **将来** | オブジェクトストレージ本体 + サムネイル添付へ移行（構成図の配置の要点）。⚠️ **この「将来」は CU-18 案 (A) と同じではありません** 〈rev.3〉 — **サムネイルが Cumulocity に残る構成**なので、**サムネイルに顔が写るなら個人情報は Cumulocity 内に残り、制約 5・6 は解消しません**。マスクを伴う案 (A′) が「将来」＋マスクに相当します |
 
 > ⭐ **[判] 制約 1 が外れたことで、網断耐性の設計が 1 段良くなります。**
 > rev.1 は「イベントと添付は不可分」という前提から、**添付が失敗するとイベントごと失われる**設計になっていました。後付け添付が可能である以上、次の分離が取れます。
@@ -1569,6 +1580,54 @@ thin-edge 側もこれに合わせています（`tedge_config.rs` の `C8Y_MQTT
 > ⚠️ ただし **`files` リポジトリ（ソフトウェアリポジトリ等）にはリテンションが及びません** [確]（*"Retention rules do not apply to files stored in the files repository."*）。**イベント添付とファイルリポジトリを混同しないでください**（§7.4）。
 
 > **[判] 添付を出すのは画像解析パイプラインのみです。** BOX はスナップショットを出しません（**[要 TE-9] N2 で確認**）。
+
+#### ⚠️⚠️ スナップショットが個人情報を含む場合 〈rev.3 で追加〉
+
+**スナップショット画像・サムネイル画像に人の顔が判別できる形で写り込む場合、上の制約 5 と制約 6 が同時に効きます。**
+
+> **「Cumulocity Edge 上で画像を表示・ダウンロードした事実を証跡として残す」は、素の Cumulocity では実現できません。**
+>
+> - **制約 5** により、参照は監査ログに記録されない
+> - **制約 6** により、「イベントは見せるが画像は見せない」という権限分離もできない
+>
+> この 2 つが重なるため、**UI 側にログ出力を仕込んでも REST の直叩きで迂回されます。迂回できるものは監査証跡になりません。**
+>
+> ⚠️ **EPL / Streaming Analytics・スマートルール・Notification 2.0 のいずれも代替になりません。** これらが扱うのは Measurement / Event / Alarm / Operation の**発生**であって、**API の読み取りをフックする仕組みは持ちません**（§8 の仕組みでは代替不能）。
+
+> ⭐ **[確] ただし「書き込み側」は開いています。**
+>
+> Audit API には **`POST /audit/auditRecords`** があり（Required roles: *"ROLE_AUDIT_ADMIN **OR** ROLE_SYSTEM **OR** AUDIT_ADMIN permission on the resource"*）、**自前の監査レコードを投入できます**。監査レコードは *"persistently stored and **cannot be externally modified after being written**"* [確] なので、証跡としての性質（改竄不能）は満たします。
+>
+> 加えて **Edge は `Microservice Hosting` が `Included`** [確]（§12.4）。**したがって「画像へのアクセスを自作経路に一本化し、そこで監査レコードを書く」なら実現可能です。**
+
+> ⭐ **[確] 制約 6 は「イベント添付」に固有です。Cumulocity 全体の性質ではありません** 〈rev.3 で追加〉。
+>
+> **`/inventory/binaries`（ファイルリポジトリ）に格納すれば、標準の権限モデルのまま「イベントは見えるが画像は 403」を作れます。** 必要ロールの構造が違うためです:
+>
+> - `GET /event/events/{id}/binaries` → `ROLE_EVENT_READ` **OR** `EVENT_READ` permission **on the source**（＝ **カメラ**。拠点グループ配下なので Inventory ロールで届いてしまう）
+> - `GET /inventory/binaries/{id}` → `ROLE_INVENTORY_READ` **OR** `ROLE_BINARY_READ` **OR** **owner of the resource** **OR** `MANAGE_OBJECT_READ` permission **on the resource**（＝ **バイナリ MO 自身**。**拠点グループ配下に置かなければ届かない**）
+>
+> ⭐ **さらに「1 イベント 1 バイナリ」（制約 2）も外れる**ため、**原本とサムネイルの 2 本**を同じイベントに紐づけられます。
+>
+> ⚠️⚠️ **ただし、ファイルリポジトリにはリテンションが及びません** [確]（§7.4）。**個人情報を含む画像が無期限に残るため、明示的な削除バッチが必須になります。** また**バイナリ 1 件 ＝ MO 1 件**なので §7.7 の MO 総数（SV-14b）に直撃します。
+>
+> **この案は §15.3 CU-18 の 案 (D) として比較表に入れています。403 になることは仕様からの推論なので、CT-5c / CU-23 で実機確認してください。**
+
+> ⚠️ **格納先を変えても制約 5 は解消しません。** `/inventory/binaries` に移しても**参照・DL が監査ログに残らないことは変わりません**。**監査レコードを自前で書く必要性は、どの案を採っても消えません。**
+
+> ⚠️ **ただし、そのためには「画像の置き場所」そのものを決め直す必要があります。**
+> 選択肢は「オブジェクトストレージへ全部出す（(A)）」「マスク済みサムネイルだけ残す（(A′)）」「`/inventory/binaries` に移す（(D)）」「暗号化して添付に残す（(B)）」「監査を諦めて人を絞る（(C)）」の 5 つです。**[要決定] CU-18（§15.3）** として起票しました。**この決定が済むまで、§11.4 のサービスユーザーと §13 の投入対象は確定できません。**
+>
+> ⚠️ **本節の「将来」欄は (A) ではなく (A′) に近い**ことに注意してください（サムネイルが Cumulocity に残るため）。
+
+> **否定の探索経路**（制約 5 の根拠）〈rev.3 レビューで修正〉:
+>
+> 1. 公式 docs の Audit logs ページ（[2025 版](https://cumulocity.com/docs/2025/standard-tenant/audit-logs/) / [2024 版](https://cumulocity.com/docs/2024/standard-tenant/audit-logs/)）の **「Audit log types」表を全 type・全 action 逐一確認** → イベント添付・バイナリの取得に該当する項目は無い。⚠️ **ただし `Report` → *"…statistics accessed"* という参照系の項目は存在する**（＝「read 系は 1 つも無い」は誤り）
+> 2. Core OpenAPI 全文（`https://cumulocity.com/api/core/dist/c8y-oas.yml`・2026-08-23 取得）で `auditRecord` スキーマと `/audit/auditRecords` を検査 → **読み取りをフックする API は存在しない**
+> 3. Notification 2.0 が購読できる API を確認 → *"alarms, alarmsWithChildren, events, eventsWithChildren, managedobjects, measurements and operations"* の **7 種のみ。binaries も読み取りフックも無い**（制約 5 の代替手段が無いことの spec 上の裏付け）
+> 4. WebSearch で docs / Tech Community を「audit log + read / download / GDPR」で探索 → 該当記述なし
+>
+> **この 4 経路をもって「画像の参照・DL は監査ログに残らない」と判断しています。** ⚠️ **rev.3 初出時は「`auditRecord.type` の enum に read 系の値が無いから」という理由付けをしていましたが、これは誤りでした**（`Report` が反例）。**理由は「画像取得 API が監査対象操作の一覧に含まれていないから」です。**
 
 ### 6.9 時刻の規約
 
@@ -1651,7 +1710,7 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 | `MEASUREMENT` | **90 日** | 同上 |
 | `ALARM` | **90 日** | 同上。⚠️ **`CLEARED` のもののみ削除される**（§7.3） |
 | `OPERATION` | **90 日** | 同上 |
-| **`AUDIT`** | **[要決定]**（イベントとは別基準） | **設定変更の追跡・障害調査要件から逆算する**（§4.10 G-13） |
+| **`AUDIT`** | **[要決定]**（イベントとは別基準） | **①設定変更の追跡・②障害調査要件**（§4.10 G-13）、および 〈rev.3 で追加〉⭐ **③個人情報アクセス記録の保存義務期間**（§6.8）から逆算する。⚠️ **③が最も長くなる可能性が高く、支配的になります** |
 
 **Cumulocity の既定と制約** [確]:
 
@@ -1687,6 +1746,32 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 
 > ⚠️ **`AUDIT` の日数が未決のままリテンション投入を実行しないでください。** 既定ルールを消すと再作成すべき値が必要になります。
 
+> ⭐ **[判] `AUDIT` の日数を決める入力に「個人情報アクセス記録の保存義務期間」を追加してください** 〈rev.3 で追加〉。
+>
+> スナップショット画像が個人情報を含む場合、**「その画像を誰がいつ見たか」を自前の監査レコードとして残す**設計になり得ます（§6.8 / **CU-18**）。**この記録も `auditRecords` に入るため `AUDIT` リテンションの対象**であり、**障害調査要件から逆算した日数では足りない可能性があります。**
+>
+> **CU-5（§15.2）の決定主体に「法務」を追加してください。** 保存義務期間は社内規程・契約・適用法令から決まるもので、基盤側では決められません。
+>
+> ⭐ **[確] 「画像アクセス記録だけ別の保持期間にする」ことは可能です** 〈rev.3 レビューで判明。CU-22 は解消〉。
+>
+> `retentionRule` スキーマに絞り込みキーの適用範囲が明記されていました:
+>
+> | キー | 適用される dataType | `AUDIT` で使えるか |
+> |---|---|---|
+> | `fragmentType` | *"Used by the data types **EVENT, MEASUREMENT, OPERATION and BULK_OPERATION**"* | ❌ **使えない** |
+> | **`type`** | *"Used by the data types **ALARM, AUDIT, EVENT and MEASUREMENT**"* | ⭐ **使える** |
+> | **`source`** | *"Used by **all data types**"* | ⭐ **使える** |
+>
+> **したがって、自前の監査レコードに専用の `type` 値を割り当てれば、`dataType=AUDIT` + `type=<画像アクセス用>` で長期、`dataType=AUDIT` + `type=*` で短期、という 2 本立てにできます。** 「個人情報の保存義務期間が `AUDIT` 全体を支配する」という懸念は回避できます。
+>
+> ⚠️ **これは監査レコードの `type` の選び方に跳ね返ります**（§15.3）。`auditRecord.type` は 20 値の固定 enum なので、**Cumulocity 自身が使っている値（`Event` など）を流用すると、この分割ができません。**
+
+> ⚠️⚠️ **`AUDIT` のリテンションルールは「証跡を狙い撃ちで消す」経路にもなります** 〈rev.3 レビューで発見〉。
+>
+> §11.2 の **R-01 基盤運用者は Retention rules ADMIN を持ちます**。`dataType=AUDIT` + `type=<画像アクセス用>` + `maximumAge=1` のルールを 1 本入れれば、**画像アクセスの証跡だけを消せます**（`source` 指定で特定カメラ分だけも可能）。**「Audit API に `PUT`/`DELETE` が無いので改竄不能」という性質は、リテンション経路を勘定に入れていませんでした。**
+>
+> ⭐ **対策が spec 側にあります**: `retentionRule.editable` は *"Indicates whether the rule is editable or not. **It can be updated only by the Management tenant.**"* [確]。**`AUDIT` のルールを `management` テナントから `editable: false` で作成すれば、`edge` テナントの R-01 では変更できません。** §13.3.6 の投入手順に反映してください。あわせて **AS-11b** で「`dataType=AUDIT` のルールが想定どおりの本数・`maximumAge` であること」を CI 検査します。
+
 ### 7.3 ⚠️ アラームは `CLEARED` のものしか削除されない
 
 **これは本構成で最も見落とされやすい制約です** [確]。
@@ -1720,6 +1805,18 @@ sm-plugin ─────────────┘  ① te/device/main///e/x_M
 | サイズ | 既定 50MiB（チャンク 5MiB） |
 
 > ⚠️ **「添付」と「ファイルリポジトリ」で挙動が正反対です。** スナップショット（イベント添付）は放っておけば消えますが、**AI モデル（ファイルリポジトリ）は放っておくと永久に残ります**。§4.4 論点 2（[要 TE-20] 旧世代の削除運用）は、この非対称ゆえに必須の運用項目です。
+
+> ⚠️⚠️ **CU-18 で案 (D)（スナップショットを `/inventory/binaries` に格納）を採る場合、この非対称が画像にも適用されます** 〈rev.3 で追加〉。
+>
+> **格納先をイベント添付からファイルリポジトリに移した瞬間、「90 日で自動的に消える」という前提が失われます。** 個人情報を含む画像が**無期限に残る**ことになるため、**明示的な削除バッチが必須**です。
+>
+> ⚠️ **これは §4.4 論点 2（AI モデルの世代管理・TE-20）と同型の問題ですが、件数が桁違いです**（検知件数 × 2 本 ＝ 原本 + サムネイル）。**個人情報の保存期間を守る唯一の手段が削除バッチになる**ため、**「バッチが止まったことを検知する監視」までを設計に含めてください**（**§12.7 のメタ監視**・SV-23 と併せて検討）。
+>
+> ⚠️ **監視条件は「バッチの成否」ではなく「最古バイナリの年齢」にしてください** 〈rev.3〉。バッチが「成功して 0 件削除」でも異常は起こりえます。**`GET /inventory/binaries?type=<画像用 type>` の最古 `creationTime` が保存期間を超えていないこと**を直接の判定条件にしてください（§12.7 ⑪）。
+>
+> ⚠️⚠️ **バックアップには及びません。** 削除バッチで消しても、§12.6 の Edge バックアップ（`/var/lib/rancher/k3s` 丸ごと）には画像が残ります。**保存期間の遵守をバックアップまで含めて主張するなら、§12.6 の保持世代・破棄手順が前提になります**（§12.6 の [要決定]）。
+>
+> **判断材料**: 案 (D) は**権限分離という利点**と**リテンションが効かないという欠点**を同時に持ちます。§15.3 CU-18 の比較表で並べています。
 
 ### 7.5 オフロード（長期保存）
 
@@ -2326,12 +2423,20 @@ WAN 断（例: 30 分）
 | **S-12** | **break-glass** | 人 | **ローカル（SSO 対象外）** | — | SSO 障害時の緊急アクセス |
 | **S-13** | **デバイス**（thin-edge） | デバイス | **X.509 証明書**（SSO 対象外） | 拠点 / VM1 | データ送出・オペレーション実行 |
 | **S-14** | **クリップ保存サービス** | サービス | サービスユーザー | VM1 | NS-2 を購読 → `exportClip`（§10.2） |
+| **S-15** 〈rev.3〉 | ⚠️⚠️ **Edge ホスト OS / k3s 管理者** | 人 | **OS ログイン（Cumulocity の認証系の外）** | Edge ホスト | インストール・アップグレード・バックアップ・障害調査（§12）。⚠️ **Cumulocity の RBAC も監査ログも一切効きません** |
+| **S-16** 〈rev.3・CU-18 決定後に確定〉 | **画像配信 / 監査書込マイクロサービス** | サービス | サービスユーザー（**R-14**） | Edge（Microservice Hosting） | 画像の認可判定 → 配信 → `POST /audit/auditRecords`。**CU-18 で (A)/(A′)/(D)/(B) を採る場合に必要**（§15.3） |
+| **S-17** 〈rev.4〉 | **監査担当** | 人 | SSO | 業務端末 | **監査ログの月次レビュー**（§12.10.8）と break-glass 使用時の事後確認。**R-17**（§11.2）で `ROLE_AUDIT_READ` を付与する（AS-13(c) の「監査担当」の実体）。⚠️ **rev.3 まで AS-13 が「監査担当」を参照しながら、主体一覧にもロール定義にも存在しませんでした** — 誰がレビューし、どのロールで読むかの両方が未定義だった漏れを解消 |
+
+> ⚠️⚠️ **S-15 は本書の統制がまったく効かない主体です** 〈rev.3 で追加〉。
+> **Edge は root アクセスが可能で k3s 上で動きます**（§15.3）。root を持てば **MongoDB を直接読める**（全画像・全監査レコード）、**`kubectl get secret` でサービスユーザーの資格情報を取得できる**、**`/var/lib/rancher/k3s` を丸ごと持ち出せる**。§11.9 AP-c「Operational Store への直接アクセスは行わない」は**規約であって強制力がありません**。
+>
+> **CU-18 でどの案を採ってもこの経路は塞がりません。** 対応は技術ではなく運用側になります — **保持者の限定・分掌・踏み台経由でのセッション記録**のいずれかを §12 で定義するか、**「Edge ホスト管理者の画像アクセスは技術的に監査不能」を法務に明示**してください。**[要決定] CU-29（§15.3）** として起票しました。
 
 > ⚠️ **S-13（デバイス）と S-7/S-11/S-12 は SSO 対象外です** [確]。SSO を有効にした後も、これらは証明書またはローカル認証で動きます。**SSO 切替時に壊れないことを §14 CT-26 で確認してください。**
 
 ### 11.2 グローバルロール定義
 
-**[判] 4 つのグローバルロールを定義します。**
+**[判] 5 つのグローバルロールを定義します**〈rev.4 訂正 — R-17（監査担当）を追加し 4→5 に〉。
 
 | ID | ロール名 | 対象主体 | 含める権限 |
 |---|---|---|---|
@@ -2339,6 +2444,7 @@ WAN 断（例: 30 分）
 | **R-02** 〈rev.2 で改訂〉 | **拠点オペレーター** | S-2 | **Own user management READ + Device Management アプリアクセスのみ。**<br>**データ系（Alarms / Events / Inventory / Measurements）はグローバルに付与しない** → R-04a（Inventory ロール）で拠点別に付与 |
 | **R-03** 〈rev.2 で改訂〉 | **業務閲覧者** | S-3 | **Own user management READ + Cockpit アプリアクセスのみ。**<br>**データ系はグローバルに付与しない** → R-04b で拠点別に付与 |
 | **R-10** 〈本書で追加〉 | **保守（AI モデル）** | S-4 | **ソフトウェアリポジトリ書込**（`ROLE_INVENTORY_ADMIN`）+ Device control ADMIN + Device Management アプリアクセス + Own user management READ。⚠️ **「files 権限」という権限カテゴリは存在しません**（公式の権限カテゴリ 21 種に無し）。**[要 SV-46]** ソフトウェアバイナリの書込に追加ロールが要るかを実機確認すること |
+| **R-17** 〈rev.4 で追加〉 | **監査担当** | S-17 | **`ROLE_AUDIT_READ` + Own user management READ + Device Management/Cockpit アプリアクセス（閲覧のみ）。`ROLE_AUDIT_ADMIN` は含めない**（AS-13 と抵触する）| 〈rev.4 訂正〉S-17（監査担当）と、直後の「付与先は R-01 基盤運用者と監査担当のみ」という規約に、この R-17 まで**具体的なロール定義が存在しなかった**（主体は定義されたが権限の実体が無い状態だった）。§13.3.4 の投入対象・AS-13(c) の CI 検査対象に R-17 を追加すること |
 
 > ⚠️⚠️⚠️ **rev.1 の R-02 / R-03 は、拠点分離を丸ごと無効化していました。**
 >
@@ -2360,6 +2466,25 @@ WAN 断（例: 30 分）
 
 > ⚠️ **⭐ Cloud Remote Access のロール（`ROLE_REMOTE_ACCESS_ADMIN`）は、どのグローバルロールにも含めません**（§4.7 手段 4）。**既定ではどのグループ・ユーザーにも割り当てられていません**ので、「付けない」を維持するだけで足ります。§13.7 AS-4 でこのロール名を検査してください。
 
+> ⚠️ **⭐ `ROLE_AUDIT_ADMIN` も、どのグローバルロールにも含めません** 〈rev.3 で追加〉。
+>
+> `POST /audit/auditRecords` の Required roles は *"ROLE_AUDIT_ADMIN **OR** ROLE_SYSTEM **OR** AUDIT_ADMIN permission on the resource"* です [確]。**このロールを人間ユーザーに付けると、監査レコードを自分で捏造できます。** 監査ログは *"cannot be externally modified after being written"* [確]（＝**書いた後は改竄できない**）という性質で証跡たり得ているので、**「書く権限」を配ると証跡としての価値がゼロになります。**
+>
+> **付与先は「監査レコードを書くサービスユーザー」のみ**とし、§13.7 **AS-13** で検査してください。**これは CU-18 の結論がどれになっても変わらないガードレールです。**
+>
+> ⚠️ **監査ログの閲覧権限（`ROLE_AUDIT_READ`）も絞ってください。** 個人情報アクセスの記録を残す設計を採る場合、**監査ログ自体が「誰がいつ誰の顔を見たか」の集合体**になります。付与先は **R-01 基盤運用者と監査担当のみ**です。
+>
+> ⚠️⚠️ **グローバルロールだけ絞っても足りません** 〈rev.3 で追加〉。**`inventoryRolePermission.scope` の enum に `AUDIT` が実在します** [確]（`ALARM` / **`AUDIT`** / `EVENT` / `MANAGED_OBJECT` / `MEASUREMENT` / `OPERATION` / `*`）。監査レコードの `source` は**対象カメラ**（＝拠点グループ配下）と決めているため、**誰かが Inventory ロールに Audits READ を足した瞬間、拠点ユーザーが「自拠点で誰が誰の顔を見たか」を読めるようになります。** → **AS-13 で「全 Inventory ロールの `permissions` に `scope: AUDIT` が含まれないこと」を検査してください。これは CU-18 でどの案を採っても必要です。**
+
+> ⚠️⚠️ **R-01「Tenant Manager 相当」を `ROLE_*` に展開してください** 〈rev.3 で追加〉。
+>
+> 本節は R-01 だけを標準ロールの流用のまま残しています。しかし**本書自身が「UI の権限レベルと API ロール名は 1:1 対応しない。投入前に `GET /user/roles` で確認せよ」と警告している**とおり、中身が不明です。**Tenant Manager に `ROLE_AUDIT_ADMIN` / `ROLE_INVENTORY_READ` / `ROLE_BINARY_READ` が含まれていれば**:
+>
+> - **AS-13 は最初から不合格**になります
+> - **CU-18 でどの案を採っても、R-01 は全拠点の画像を無監査で取得できます**（(D) でも `ROLE_INVENTORY_READ` が 4 択の 1 つ目を満たすため）
+>
+> **CU-19 と同時に実機で `GET /user/roles` を引き、R-01 の実体を確定させてください**（**CU-27**）。外せないなら「**基盤運用者の画像アクセスは技術的に監査不能**」を法務に明示する必要があります。
+
 ### 11.3 Inventory ロール定義と割当
 
 **Inventory ロールが拠点分離の実装点です。**
@@ -2370,6 +2495,19 @@ WAN 断（例: 30 分）
 |---|---|---|---|
 | **R-04a** | **拠点Manager** | Alarms ALL / Events READ / **Inventory ALL** / Measurements READ | 拠点オペレーター（S-2）× 担当拠点グループ |
 | **R-04b** | **拠点Reader** | Alarms READ / Events READ / Inventory READ / Measurements READ | 業務閲覧者（S-3）× 担当拠点グループ |
+
+> ⚠️⚠️ **`Events READ` は「スナップショット画像のダウンロード権限」を含みます** [確]〈rev.3 で追加〉。
+>
+> `GET /event/events/{id}/binaries` の Required roles は *"ROLE_EVENT_READ **OR** EVENT_READ permission on the source"* です（Core OpenAPI `getEventBinaryResource`）。**イベント本体の参照と添付画像の取得を、Cumulocity 標準の権限モデルで分離することはできません。**
+>
+> **したがって R-04a / R-04b を割り当てた利用者は、UI を経由せず `curl` で直接スナップショットを取得できます。** スナップショットが個人情報（顔が判別できる画像）を含む場合、**「UI にログを仕込む」だけの対策は監査証跡になりません**（迂回できるため）。→ **§6.8 制約 5・6 / CU-18 / CT-5b**
+>
+> ⚠️ **S-5（紐づけ確認アプリ）も同じです。** エンドユーザーの OIDC トークンで動く（D-e）ため、**同じトークンで REST を直叩きできます。**
+
+> ⚠️⚠️ **`Inventory ALL` は削除権限を含みます** 〈rev.3 で追加〉。
+> `DELETE /inventory/managedObjects/{id}` は *"… **OR** `MANAGE_OBJECT_ADMIN` permission on the source"* で通り、*"**Deleting a parent group will also delete its subgroups.** The `cascade` parameter controls whether the devices assigned to the groups are also deleted."* [確]。**つまり拠点 Manager は自拠点のカメラを、さらには拠点グループごと（cascade で配下デバイスも）削除できます。**
+>
+> rev.2 で `CHANGE` → `ALL` に上げた理由は「一覧が開けないから」だけで、**削除を含むことの評価をしていませんでした。** 削除自体は監査ログに残りますが（`type=Inventory`）、**誰も見ていなければ意味がありません** → §12.7 ⑭ で監視対象に入れました。**「拠点 Manager に削除させるか」を CU-3（物理削除 / 論理削除）の入力に追加してください。**
 
 > ⚠️ **`CHANGE` は `READ` を含みません** [確]: *"CHANGE - to modify objects (**does not include READ permission**)"* / *"ALL - to read AND modify objects"*。
 > rev.1 は R-04a を `Inventory CHANGE` としていましたが、**グローバルの `Inventory READ` を外した rev.2 では、これだと拠点 Manager がデバイス一覧を開けなくなります。** `Inventory ALL` に改めました。
@@ -2403,14 +2541,31 @@ WAN 断（例: 30 分）
 | **R-09** | **トークン発行プロキシ** | S-7 | ⚠️ **`ROLE_NOTIFICATION_2_ADMIN` を持つ唯一の主体** | §10.4。**他の誰にも付与しない** |
 | **R-11** 〈本書で追加〉 | **オフロードバッチ** | S-10 | 拠点横断 READ | §7.5 |
 | **R-12** 〈本書で追加〉 | **クリップ保存サービス** | S-14 | Alarms READ + 通知購読用トークンの受領 | §10.2 NS-2 |
+| **R-14** 〈rev.3・**CU-18 決定後に確定**〉 | **画像配信 / 監査書込マイクロサービス** | S-16 | **`ROLE_AUDIT_ADMIN`**（監査レコード書込）+ 画像読取（(D) なら **`ROLE_BINARY_READ` のみ**。`ROLE_INVENTORY_READ` は付けない） | §15.3。⚠️ **`ROLE_AUDIT_ADMIN` を持つ唯一の主体**（AS-13）。**認可判定の要件は §11.11** |
 
 > **[判] R-06 を 2 つに分ける理由**: 単一アカウントだと**分析処理のバグが本番デバイスの設定を壊せる状態**になります。実装コストはユーザーを 1 つ増やすだけです。
+
+> ⚠️⚠️ **「拠点横断 READ」はスナップショット画像の取得権限を含みます** 〈rev.3 で追加〉。
+>
+> §6.8 制約 6 により **`Events READ` ＝ 添付画像の DL 権限**です。したがって **R-06a（運用知識基盤・読取）と R-11（オフロードバッチ）は、全拠点の顔画像を証跡なしで取得できます。** §11.3 の警告は R-04a / R-04b と S-5 しか名指ししていませんでしたが、**実際にはこちらのほうが範囲が広い**（拠点横断のため）。
+>
+> ⚠️ **CU-18 で案 (D) を採る場合はさらに注意が要ります。** (D) の 403 は「グローバルの `ROLE_INVENTORY_READ` / `ROLE_BINARY_READ` を持たない」ことが前提ですが、**R-06a は定義上 Inventory の拠点横断 READ を持ちます**。実装がグローバルロールに落ちると **(D) の隔離はこの 1 アカウントで破れます**。
+>
+> **[判] 拠点横断 READ を持つサービスユーザー（R-05 / R-06a / R-11）には、次を規約とします**:
+>
+> 1. **`ROLE_BINARY_READ` / `ROLE_BINARY_ADMIN` を付与しない**
+> 2. **Inventory 権限は root 拠点グループへの Inventory ロールで与え、グローバル `ROLE_INVENTORY_READ` を使わない**（⚠️ **SV-47 の結果次第では Inventory ロールが `childDevices` に届かず、グローバルへ逃げる圧力がかかります。CU-18 の前提条件として SV-47 の結論を先に得てください**）
+> 3. **R-05「最小限の READ」は具体的な permission 一覧に展開する**（現状は未定義）
+>
+> → **CK-8(b) / AS-14(b) の検査対象**（§2.8 / §13.7）
+
+> ⚠️ **R-10（保守・AI モデル）は `ROLE_INVENTORY_ADMIN` を持ちます** 〈rev.3 で追加〉。CU-18 で案 (D) を採ると**画像は AI モデルと同じファイルリポジトリに入る**ため、**R-10 は画像を読み・差し替え・削除できます**。しかも R-10 は業務上まさにそのリポジトリを触る主体です。**`type` による分離は権限境界ではありません。** SV-46（ソフトウェアバイナリ書込に本当に `ROLE_INVENTORY_ADMIN` が要るか）の実機確認と併せて、**`ROLE_INVENTORY_CREATE` 等への降格**を検討してください。R-06b も同じ理由で検査対象です。
 
 > ⚠️ **サービスアカウントの復旧手段は「削除 → 同名で再作成」です**（§12.8）。**ロール・Inventory ロール・アプリケーションアクセスの再割当が必要**になります（ユーザーを削除すると割当も消えるため）。**投入スクリプトが冪等なら、再実行がそのまま復旧手段になります。**
 >
 > **[確] ユーザー ID は変わりません。** Cumulocity のユーザー ID は**ユーザー名そのもの**です（OpenAPI の example: `self: 'https://<TENANT_DOMAIN>/user/{tenantId}/users/jdoe'` / `id: jdoe` / `userName: jdoe`）。rev.1 は「ID が変わるため再割当が必要」としていましたが、理由が誤りでした。
 >
-> **したがって CI 側で同期が必要なのは ID ではなくパスワードです。** 再作成時に新しいパスワードが発行されるため、**CI シークレットストアの更新を復旧手順に必ず含めてください**（[担当範囲] RB-11）。ID を参照している設定は書き換え不要です。
+> **したがって CI 側で同期が必要なのは ID ではなくパスワードです。** 再作成時に新しいパスワードが発行されるため、**CI シークレットストアの更新を復旧手順に必ず含めてください**（[担当範囲] RB-9〈rev.4 訂正 — rev.3 までは RB-11（バッファ溢れ対応）を誤って参照していました〉）。ID を参照している設定は書き換え不要です。
 
 ### 11.5 break-glass と管理者アカウント
 
@@ -2560,11 +2715,35 @@ WAN 断（例: 30 分）
 
 > ⚠️⚠️ **テスト 1b / 1c は rev.1 のロール定義では必ず失敗しました。** グローバルの `Alarms READ` / `Inventory READ` があると **テナント全体が返る**ためです（§11.2）。rev.2 でグローバル権限を削減したことで初めて意味のあるテストになります。**ロール改訂と否定テストはセットで実施してください。**
 
+### 11.11 ⚠️⚠️ 画像配信マイクロサービス（R-14）の認可仕様 〈rev.3 で追加〉
+
+**⚠️ CU-18 で (A) / (A′) / (D) / (B) のいずれかを採る場合、本節は必須要件です。決定前でも先に読んでください — この要件を落とすと、案 (D) の権限分離は「直叩きは 403、正規経路は全開」になります。**
+
+> ⚠️⚠️ **[判] マイクロサービスは confused deputy になります。**
+>
+> §15.3 案 (D) の「標準の権限モデルで拠点分離できる」は、**直叩き経路に限った話**です。**正規の閲覧経路は `ROLE_BINARY_READ` を持つ R-14 で、そこには Cumulocity の拠点分離が一切効きません。** R-14 が「この利用者はこのバイナリを見てよいか」を**自前で判定しなければ、拠点 A のユーザーが拠点 B の `binaryId` を投げれば 200 が返ります。** 監査レコードは「拠点 A の人が見た」と正しく残るだけで、**アクセスは成功します。**
+>
+> **これは (A) / (A′) / (B) でも同じ構造です**（配信主体が特権を持ち、拠点分離を自前で再現する必要がある）。
+
+**[判] R-14 が満たすべき要件**:
+
+| # | 要件 | 理由 |
+|---|---|---|
+| **MS-a** | **エンドユーザーの OIDC トークンを検証し、その利用者の Inventory ロール割当を Cumulocity に問い合わせて認可判定する** | R-14 のサービスユーザー権限で判定してはいけない（それが confused deputy） |
+| **MS-b** | **binary → 拠点の判定方法を定義する。** ⚠️ CK-8(a) によりバイナリ MO はどのグループにも属さないので、**グループからは引けません** | 逆引き経路を決めないと実装できない |
+| **MS-c** | ⚠️⚠️ **binary → event → camera → group の逆引きに依存しないこと。** `EVENT` リテンション 90 日でイベントが先に消えると、**バイナリは「どの拠点のものか判定できない孤児」になります**（(D) はバイナリにリテンションが効かないため必ず発生する） | **[判] バイナリ MO 自身に `x_Site.siteId` を持たせてください。**グループには入れないので CK-8(a) と両立します |
+| **MS-d** | **判定不能なときは fail-close（403）** | 孤児バイナリを黙って配信しない |
+| **MS-e** | ⚠️ **監査レコードの `user` は、検証済み OIDC トークンの `userIdConfig.jwtField` からのみ導出する。リクエストボディ／ヘッダ由来の値を使わない** | `auditRecord.user` は `readOnly` ではない [確] ため、**呼出側の値をそのまま入れる実装だと任意の名前になりすませます**。AS-13 で守ったはずの改竄不能性が実装 1 行で無効化されます |
+| **MS-f** | ⚠️ **アプリケーションログに userId / binaryId / 画像バイト列を出さない** | 出すと **`ROLE_AUDIT_READ` の保護外・`AUDIT` リテンションの外**に、平文で第 2 のアクセス記録ができます。**§15.3 で ingress アクセスログ案を却下した理由③とまったく同じ問題**が自作マイクロサービスで再発します |
+| **MS-g** | **監査レコードの時刻は `creationTime`（プラットフォーム付与）を正とする。`time` は事象時刻の参考値** | `time` は writable、`creationTime` は `readOnly` [確]。**書き手が決める値は証跡になりません** |
+
+> ⚠️ **否定テスト CT-5d（§14.2）が本節の合格判定です。** 「拠点 A のユーザーが拠点 B の `binaryId` を R-14 に要求 → 403」を確認できるまで、(D) の拠点分離は成立していません。
+
 ---
 
 ## 12. Cumulocity Edge セットアップ
 
-> **本章は「設置から設定投入を始められる状態まで」を扱います。設定項目そのものは §13 です。実施手順の詳細は [設定書] §5 P0〜P1 が正です。**
+> **本章は「設置から設定投入を始められる状態まで」（§12.1〜§12.9）と、稼働後の定常運用・計画作業（§12.6 バックアップ・§12.7 監視・§12.10 運用設計 〈rev.4〉）を扱います。設定項目そのものは §13 です。実施手順の詳細は [設定書] §5 P0〜P1 が正です。**
 
 ### 12.1 セットアップの全体像
 
@@ -2572,7 +2751,8 @@ WAN 断（例: 30 分）
 ①  ネットワーク前提の確定  ── install 後に直せない（§12.2）
 ②  ドメイン 2 つ + TLS 証明書 + ライセンス + registry credentials の受領
 ③  容量サイジング（§7.6）── storageClassName は install 後変更不可
-④  検証環境 Edge の構築  ── 前提 2〜4（§0.7）をここで潰す
+④  検証環境 Edge の構築  ── 前提 2〜8（§0.7）をここで潰す 〈rev.3 で範囲拡大〉
+                              ＋ CT-5b / CT-5c（前提 9 の (D)/(B) 評価）
 ⑤  本番 Edge のインストール  ── 冪等化不可・1 回きり
 ⑥  閉域網固有の設定（CA / no_proxy）
 ⑦  マイクロサービス稼働確認（Apama-ctrl / Smartrule / Messaging Service）
@@ -2608,6 +2788,7 @@ WAN 断（例: 30 分）
 | **P-0-5** | **ハードウェア最小要件** | CPU **8 コア** / RAM **16 GB** / Disk **150 GB**。**MongoDB は AVX 命令 + x86-64-v3 以降が必須**（`lscpu` で確認）。⚠️ **CPU/RAM は後から増設可能**（AVX / x86-64-v3 は CPU 交換になるので事前確認必須） | [確] |
 | **P-0-6** | ⭐⭐ **`storageClassName` の確定** — **本節で唯一の真に不可逆な項目** | *"Once the `storageClassName` field is configured in the Edge custom resource (CR), it cannot be changed."* | [確] |
 | **P-0-7** | **MongoDB 容量の初期値** | 既定 75GB。**増やせるが減らせない**ため、**やや小さめから始めて増設する**運用も選べる（§7.6） | [確] |
+| **P-0-8** 〈rev.3〉 | ⭐ **仮想化基盤とスナップショット機能** | **VM1 の仮想化基盤（またはストレージ）が「ディスク全体の原子スナップショット」を提供するか。** ⚠️ **提供しないなら、バックアップは「Edge を停止してコールドコピー」しか選べず、取得のたびに全拠点が停止します**（§12.6.2 / CU-33）。⚠️ **`/var/lib/rancher/k3s` が複数ボリュームにまたがる場合、それらを同時点でスナップショットできること** | **[要確認]** |
 | **P-2** | **ドメイン 2 つと TLS 証明書の SAN** | §12.3。**変更は可能だが波及が大きい**（下記） | [確] |
 | **P-3** | **ライセンス**（ドメインに紐づく） | *"the license key must always be valid for the domain name, so any change of domain name should be made simultaneously with a change of license key."* **ドメインと同時に差し替えること** | [確] |
 
@@ -2679,23 +2860,270 @@ sudo c8yedge config --set-file tlsSecret.tls.key=<path-to-key> \
 
 **自前 K8s の場合** [確]: `kubectl create secret tls edge-tls-secret --cert=<crt> --key=<key>` → Edge CR の `spec.tlsSecretName` を更新して `kubectl apply`
 
-> ⚠️⚠️ **rev.1 は §12.2 で「TLS は install 後に変更できない」と誤記していたため、この定期作業の手順が本書から欠落していました。** 証明書の有効期限は必ず来ます。**§12.7 のメタ監視に「Edge サーバー証明書（`<domain>` / `management-<domain>`）の残存期間」を必ず加え、更新を runbook 化してください**（[担当範囲] RB-13）。失効すると**全拠点・全案件アプリの HTTPS / WebSocket が同時に全断**します。
+> ⚠️⚠️ **rev.1 は §12.2 で「TLS は install 後に変更できない」と誤記していたため、この定期作業の手順が本書から欠落していました。** 証明書の有効期限は必ず来ます。**§12.7 のメタ監視に「Edge サーバー証明書（`<domain>` / `management-<domain>`）の残存期間」を必ず加え、更新を runbook 化してください**（⚠️ 〈rev.4 訂正〉rev.3 までは [担当範囲] RB-13 を参照していましたが、**RB-13 は R-08 アカウントのライフサイクル管理であり別物**です。**TLS 証明書更新の runbook は [担当範囲] §10.3 の一覧に存在しません** — §12.10.6 の追補一覧から [担当範囲] へ起票してください）。失効すると**全拠点・全案件アプリの HTTPS / WebSocket が同時に全断**します。
 
 > ⚠️ **証明書・社内 CA のローテーション手順が必要です**（SV-22）。社内 CA ルートを更新すると **thin-edge 側の信頼ストア更新が必要**で、数百台 × N 拠点が同時に接続不能になり得ます。しかも**配布経路（Cumulocity 経由のソフトウェア更新）も同時に使えません**。**新旧 CA を並行して信頼させる移行期間**を設計に入れてください。
 
-### 12.6 バックアップ／リストア
+### 12.6 バックアップ／リストア 〈rev.3 で全面設計・rev.4 で完成（推奨値と runbook）〉
 
-| 形態 | 保全対象 | 復元手順 |
+**D17 により全拠点が 1 台の Edge に集約されています。バックアップは本構成で唯一の全損対策です。**
+
+#### 12.6.1 ⚠️⚠️ 公式が提供しているのは「復元手順」だけです
+
+**[確] 公式ドキュメント（Edge operations の Backup and recovery）の構成**:
+
+| ステップ | 公式の記述 | 評価 |
 |---|---|---|
-| **`c8yedge`（K3s）** | **`/var/lib/rancher/k3s`** | 同一（または互換）OS を用意 → データ復元（**パス・所有者・権限を保持**）→ `sudo c8yedge install --version <previous_version>`（オフラインは `-s c8yedge.tar`） |
-| 自前 K8s | **PVC と Edge CR** | 同上の考え方 |
+| **Step 1 — 保全対象** | *"The following directories must be preserved for disaster recovery. **Implement appropriate data protection measures (for example, backups or redundant storage)** to safeguard these directories:"* → **`/var/lib/rancher/k3s`（1 ディレクトリのみ）** | ⚠️⚠️ **取得方法は「組織の責務」として丸投げされています。これが本節を設計しなければならない理由です** |
+| **Step 2 — 復元先の準備** | 同一（または互換）OS を用意／**`K3s` と Edge のデータが存在しないクリーンなディスク**であること／バックアップを対象機から利用可能にする（*"For **snapshot-based or storage-level backups**, ensure the snapshot is accessible"* とあり、スナップショット方式は想定されている） | [確] |
+| **Step 3 — データ復元** | *"Restore the backup so that the directories land in their original locations, **preserving paths, ownership, and permissions**. **Omitting directories or restoring to incorrect locations can corrupt the cluster.**"* → `ls -ld /var/lib/rancher/k3s` で確認 | [確] |
+| **Step 4 — 同一版で再インストール** | `sudo c8yedge install --version <previous_version>`（閉域は `-s c8yedge.tar`）。*"The installer detects that Cumulocity Edge is already installed and **waits for the recovery to complete** before exiting."* 成功時に `Edge recovered successfully.` が出る | [確] |
+| — | ⚠️ *"Installing a different Edge version on top of a restored data set is **unsupported** and may fail the upgrade guard rails."* | [確]（P-0 / E-07） |
+| **自前 K8s の場合** | *"Ensure that **Persistent Volume Claims (PVCs) and the Edge custom resource configuration** are included in your backup strategy."* | [確]。本構成は `c8yedge`（K3s）なので上の行が適用されます |
 
-> ⚠️ *"Installing a different Edge version on top of a restored data set is unsupported and may fail the upgrade guard rails."* **復元時は同一バージョンが必須です** [確]。
-
-> ⚠️⚠️ **D17 により全拠点が 1 台の Edge に集約されています。** ディスク障害・MongoDB 破損・誤配信のいずれでも**全拠点が同時に停止**します。
+> ⚠️⚠️ **[判] 公式の runbook は「create a consistent backup」と述べていますが、Step 1 に一貫性を担保する手順がありません。**
 >
-> - **リストア試験の成功を §13 に進むゲートにしてください**（§12.4 確認 7）
-> - **[要 SV-29] RTO/RPO を数値で決め**、BOX と thin-edge のバッファ保持時間を実測して「Edge 停止許容時間」として明記してください
+> **`c8yedge` CLI に backup / stop / start / quiesce に相当するコマンドは存在しません** [確]。存在するのは **`install` / `package` / `config` / `upgrade` / `uninstall` の 5 つだけ**です〈rev.4 訂正 — rev.3 は `package`（閉域用オフラインパッケージ生成・§12.4）を数え落として「4 つ」と書いていました。backup / stop / quiesce が無いという結論は変わりません〉。
+>
+> **否定の探索経路**: ① Edge operations ページ（Backup and recovery 節）の全文を取得して確認 → 取得コマンドの記載なし ② Edge manage ページの `c8yedge` サブコマンド一覧を確認 → `config` / `upgrade` / `uninstall` のみ（サービス停止・保守モードの記載なし。サービス操作は `kubectl rollout restart` 等で行う旨のみ）③ Edge installing ページを確認 → 取得手順の記載なし。**この 3 経路をもって「取得側は製品機能として提供されていない」と判断しています。**
+>
+> **したがって「どうやって整合の取れたコピーを作るか」は本書で決める必要があります** → **12.6.2 / [要決定] CU-33**。
+
+#### 12.6.2 ⚠️⚠️ 取得方式 — [要決定] CU-33
+
+**ここが本節の中心です。`/var/lib/rancher/k3s` には次が同居しています** 〈rev.4 で K3s 公式に基づき配下パスを特定〉:
+
+| 中身 | 場所（`/var/lib/rancher/k3s` 配下） | 一貫性の観点 |
+|---|---|---|
+| **MongoDB のデータ**（local-path の Persistent Volume。既定 75GB・P-0-7） | `storage/`（local-path PV の既定パス [確]） | ⚠️ 書き込み中のコピーは破損しうる |
+| **K3s の datastore**（クラスタ状態そのもの。**シングルノードの既定は SQLite** [確]） | `server/db/` | ⚠️ 同上。壊れると *"can corrupt the cluster"* |
+| ⭐ **K3s server token** 〈rev.4〉 | `server/token` | **datastore 内の機密データはこの token で暗号化されています。** K3s 公式: *"If you do not use the same token value when restoring, the snapshot will be unusable, as the token is used to encrypt confidential data within the datastore itself."* [確] → **`server/db` だけ取って token を欠くバックアップは復元不能**。公式保全対象 `/var/lib/rancher/k3s` を丸ごと取れば両方含まれます |
+| containerd のイメージ・その他 PV | `agent/` ほか | 容量の大半 |
+
+> ⭐ **「1 ディレクトリで足りる」ことの裏付け** 〈rev.4〉: K3s 公式は SQLite datastore について *"No special commands are required to back up or restore the SQLite datastore. To back up the SQLite datastore, take a copy of `/var/lib/rancher/k3s/server/db/`."* と述べており [確]、datastore・token・local-path PV のすべてが `/var/lib/rancher/k3s` 配下にあります。Edge 公式の保全対象指定と整合します。⚠️ ただし `/etc/rancher/k3s/`（K3s 設定）は保全対象に**含まれていません**（Edge 公式ページに `etc/rancher` の言及 0 件・rev.4 で全文確認）— 復元手順が「クリーン OS + 再インストール」であり、**インストーラが再生成する前提** [推] です。
+
+**[確] MongoDB 公式の要件**（WiredTiger）:
+
+> *"The database must be valid when the snapshot takes place. This means that all writes accepted by the database need to be fully written to disk: either to the journal or to data files."*
+> *"For the WiredTiger storage engine, the data files reflect a consistent state **as of the last checkpoint**. Checkpoints occur with every 2 GB of data or every minute."*
+> *"MongoDB supports volume-level back up ... **when the MongoDB instance's data files and journal files reside on separate volumes**. However, to create a coherent backup, **the database must be locked** and all writes ... suspended during the backup process."*
+
+> ⚠️ 〈rev.4〉**「2 GB ごとまたは 1 分ごと」という一次情報は MongoDB 公式内で記述が割れています。** 上記引用元（backup-with-filesystem-snapshots チュートリアル）には現在もこの一文がありますが、MongoDB 公式の WiredTiger リファレンスページ（無バージョン最新版・v7.0/v8.0/v8.2 いずれも）は *"MongoDB configures WiredTiger to create checkpoints...at intervals of 60 seconds."* とのみ記載し、2GB 条件への言及がありません（rev.4 で複数バージョンを横断確認）。**本書の結論（クラッシュコンシステントなスナップショットは概ね直近 1 分以内のチェックポイント状態に整合する）はどちらの記述でも成立するため実害はありませんが、[確] として引用する一次情報が内部で不整合を起こしている点は認識しておいてください。**
+
+**[判] 上記から、取得方式は次の 3 択になります。**
+
+| 案 | 方式 | 一貫性 | ダウンタイム | 評価 |
+|---|---|---|---|---|
+| ❌ **(i) 稼働中に `tar` / `rsync` でファイルコピー** | ディレクトリを走査してコピー | ⚠️⚠️ **無い。** コピーに時間がかかる間もファイルは更新され続けるため、**MongoDB も K3s datastore も「途中の状態が混ざったコピー」になります** | なし | ⚠️ **採ってはいけません。** 「バックアップを取っている」つもりで**復元できないものを溜める**のが最悪の結果です |
+| ⭐ **(ii) VM / ストレージレベルの原子スナップショット** | VM1 のディスクを**一瞬で**スナップショット | **[推] 有効**。データとジャーナルが同一ボリュームにあるため、スナップショット時点で「journal または data files に書き終わったもの」が揃い、**起動時のジャーナル再生で整合します**。K3s datastore も同時点 | **ほぼ無し** | **本命。** ⚠️ **成立条件が 2 つあります**（下記） |
+| **(iii) Edge を停止してコールドコピー** | K3s を停止 → ファイルコピー → 起動 | **確実** | ⚠️ **コピー時間ぶん全拠点が停止**（150GB 級） | **(ii) の成立条件が満たせない場合の代替。** ⚠️ **停止コマンドが公式に無い**ため、K3s の systemd サービス停止で代用することになり、**手順自体が非公式**になります |
+
+> ⚠️⚠️ **案 (ii) の成立条件**:
+>
+> | # | 条件 | 未確認なら |
+> |---|---|---|
+> | **1** | **VM1 の仮想化基盤が「ディスク全体の原子スナップショット」を提供すること**。⚠️ **`/var/lib/rancher/k3s` が複数ボリュームに分かれている場合、それらを同時点でスナップショットできること**（またぐと整合が壊れます） | 案 (iii) へ |
+> | **2** | **Edge の MongoDB が data files と journal を同一ボリュームに置いていること** [推]〈rev.4 で根拠を補強〉。**Edge CR の MongoDB 用 PVC は `mongod-data-edge-db-rs0-0` の 1 個のみ** [確] で、**CRD に journal を別ボリュームへ分ける設定は存在しません**（CRD ページ全文に `journal` の出現 0 件・rev.4 で確認）。WiredTiger の既定配置は dbPath 配下の `journal/` サブディレクトリなので**同一 PV に同居する**と判断できます。ただし公式に journal の配置を明言した記述は無いため [確] には上げません。⚠️ **別ボリュームなら MongoDB 公式は `db.fsyncLock()` を要求しており、案 (ii) 単独では不十分になります** | **`db.fsyncLock()` を挟む手順が要る。ただし §7.1 DS-c（Operational Store への直接アクセス不可）と抵触するため、代替として案 (iii)** |
+>
+> **[要決定] CU-33（§15.3）** — **①取得方式（(ii)/(iii)）②取得頻度 ③保持世代数 ④保管先**。**②③④は RPO と保管容量、そして CU-30（個人情報の破棄）に直結します。**
+
+> ⚠️ **VM1 の仮想化基盤が本書に記載されていません。** → **P-0-8「仮想化基盤とスナップショット機能の確認」として §12.2 に追加済み**〈rev.4 で本文の記載を追い付かせた — rev.3 は「追加してください」のままでした〉。**P-0-8 の確認結果が CU-33 の入力です。**
+
+#### 12.6.2b [判] CU-33 への回答 — 推奨設計 〈rev.4 で追加〉
+
+**rev.3 は CU-33 を「決めてください」で止めていました。本節で ①〜④ の推奨値を設計として提示します。** P-0-8（仮想化基盤の確認）と CT-36（負荷下の一貫性実証）が通るまでは**仮決定**ですが、**値が無いと保管先の調達も監視のしきい値も決まらない**ため、先に値を置きます。
+
+| 決定事項 | **[判] 推奨** | 根拠 |
+|---|---|---|
+| **①取得方式** | ⭐ **案 (ii) VM 全ディスクの原子スナップショット → 保管先へエクスポート → スナップショット即削除**。P-0-8 不成立時のみ案 (iii)（コールドコピー・下記手順） | 公式が *"For snapshot-based or storage-level backups, ensure the snapshot is accessible and ready for restore"* とスナップショット方式を復元手順の前提として明示的に許容 [確]。**installing-edge も VM イメージのエクスポートに好意的**（*"the advantage of most VM technologies is that a running image can be exported to be run in another environment without further configuration"* [確]） |
+| **①-2 静止化** | **crash-consistent（無停止・ゲスト静止化なし）を基本とする**。ハイパーバイザのゲスト静止化（quiesce / fs-freeze）は**あれば使うが、成立要件にはしない** | MongoDB は journal 再生で整合 [確]（12.6.2）、K3s の SQLite も同様のクラッシュ回復を持つ [推]。**CT-36 が crash-consistent の実証試験そのもの** |
+| **②取得頻度** | **日次 1 回（データ流量が最少の時間帯）＋ イベント駆動 4 点**〈rev.4 訂正 — UP-c（§12.10.2）と重複していた「アップグレード完了後」を正式に4点目として編入〉: (a) `c8yedge upgrade` 直前（BK-c）(b) `c8yedge upgrade` 完了直後・新版で1世代（BK-c／UP-c と同一事象） (c) §13 の大規模設定投入の直前 (d) テナント CA 作成直後（BK-l・下記） | 名目 RPO = 24h。⭐ **実効損失はデータ種別で非対称**（下記） |
+| **③保持世代** | **日次 7 世代 ＋ 週次 4 世代 ＋ 直近アップグレード前 1 世代**（≒ 最大 12 世代） | ⚠️ **遡及日数はローテーション方式に依存し、本節だけでは確定しない**（12.6.3 BK-m に生成規則と実際の遡及日数を定義） |
+| **④保管先** | **Edge ホスト（VM1）と別障害ドメインの保管先**（別筐体・別ラック電源。可能なら別建屋）。**容量は実ディスクサイズ×12世代を上限に確保し、P-0-5 の最小要件 150GB では計画しない**（⚠️ 〈rev.4 訂正〉150GB は P-0-5 のハードウェア**最小**要件であり、実際の調達サイズや P-0-7 による MongoDB 増設後のサイズとは別物。実サイズ確定後に本節の容量を再計算すること。増設時の再計算トリガは §12.10.1「容量・スケールの再算定」に統合済み）。暗号化・アクセス制御は 12.6.6 | 同一筐体・同一ストレージへの保管は「全損対策」にならない（D17 — これが唯一の全損対策）。転送帯域は RTO ④（実ディスクサイズ分の転送）に直結するため、**保管先選定時に復元方向の転送時間も見積もること** |
+
+> ⭐ **RPO 24h の実効的な意味 — 失われるものの非対称** 〈rev.4〉:
+>
+> | データ | T-Δ〜障害発生の間の変化 |
+> |---|---|
+> | 計測・イベント（デバイス発） | ⭐ **thin-edge のストア&フォワードが再送するため、バッファ保持範囲内なら埋まる**（RS-2 / SV-44） |
+> | 設定（リテンション・ロール・ルール等） | ⭐ **Git から再投入できる**（BK-g） |
+> | ⚠️ **Cumulocity 内でしか起きない状態変化** — アラームの CLEARED、オペレーションの進行状態、監査レコード、ユーザー操作、Notification 2.0 のコンシューマ位置 | ⚠️ **丸ごと失われます。どの経路でも再現できません。** 24h ぶんのこれらを失えないなら頻度を上げる（ただし取得中の I/O 負荷と保管容量が線形に増える） |
+
+**取得手順（案 (ii)）**〈rev.4 訂正 — 旧称「runbook RB-BK1」は削除。[担当範囲]の RB-nn 体系と字面が衝突し、§12.10.6 が自ら禁じた「本書側での runbook 採番」を先取りしてしまっていたため。正式な runbook 番号は [担当範囲] 側での採番（§12.10.6）を待つ〉:
+
+```
+0. 前提: P-0-8 確認済み / 保管先に到達可能 / 空き容量 ≥ 1 世代ぶん
+1. VM1 の全ディスクを原子スナップショット（crash-consistent。複数ディスク構成なら同時点で）
+2. スナップショットから保管先へフルイメージをエクスポート
+   （ファイル単位で取りたい場合もイメージをマウントして /var/lib/rancher/k3s を
+     paths / ownership / permissions を保持して取り出す — 復元 Step 3 の要件 [確]）
+3. ⚠️ スナップショットを即時削除（残置禁止 — BK-k）
+4. manifest を世代に併置（BK-b の実体）:
+   取得日時 / Edge バージョン / 方式 / サイズ / チェックサム /
+   Edge CR エクスポート（§12.4 確認 2 と同じ整形）/ 対応するインストーラ一式の所在（BK-j）
+5. チェックサム検証（エクスポート直後に 1 回）
+6. 監視へ報告: 最新世代の取得時刻・世代数・保管先空き容量（§12.7 ⑮ の入力）
+```
+
+> [要実機確認] **Edge バージョンの機械的な取得方法**（manifest 用）。インストーラ出力 *"running version 2025.0.X"* [確] が一次候補だが、稼働中に取るコマンドは W1 で確定すること（Edge CR / `c8yedge` の版表示の実体確認）。
+
+**取得手順（案 (iii)・P-0-8 不成立時の代替）** 〈rev.4 で K3s 公式手順に基づき具体化 — rev.3 の「手順自体が非公式」を更新。**Edge としての停止手順は依然として公式提供が無い**が、K3s の停止は K3s 公式手順 [確] に乗る〉:
+
+```
+1. sudo systemctl stop k3s          # ⚠️ スーパーバイザが止まるだけ。コンテナ（MongoDB 含む）は動き続ける [確]
+2. sudo /usr/local/bin/k3s-killall.sh
+   # 全コンテナ停止 + containerd リセット。"The cluster data will not be deleted." [確]
+3. tar --numeric-owner --acls --xattrs -cpf <保管先>/k3s-<日付>.tar /var/lib/rancher/k3s
+4. sudo systemctl start k3s
+5. 起動確認: 両テナント URL でログイン / kubectl get pods -n c8yedge が全て Running
+6. manifest・チェックサム・監視報告（案 (ii) の 4〜6 と同じ）
+```
+
+> ⚠️ **案 (iii) の停止時間 = 手順 1〜4 の間、全拠点が Edge に書けません。** 150GB 級のコピーは転送先性能次第で**数十分〜時間単位**。mosquitto 既定 1000 件のバッファ（SV-44）を超えた拠点はデータが欠落します。**案 (iii) を常用する場合は、取得頻度を週次に落とすか、バッファ増量（[担当範囲]）とセットで決めること。**
+
+> ⭐ **復元経路は 2 本になります**（12.6.4b で詳述）: フルイメージを取っているので、**「VM 復元」— VM イメージごと戻す**（仮想化基盤が健在な場合。OS 準備・再インストールが不要になり **RTO の ③④⑤ が大幅に縮む**）と、**「クリーン復元」— 公式手順どおりクリーン OS ＋ データ復元 ＋ `c8yedge install --version`**（基盤ごと失った場合・別筐体への復元）の両方が同じ成果物から実行できます。⚠️ 〈rev.4 訂正〉旧称「(R-A)/(R-B)」は削除（既存のグローバルロール ID R-01〜R-16 と同一プレフィックスで紛らわしいため）。**CT-35 は少なくとも「クリーン復元」で実施してください** — こちらだけ試験していないと、基盤全損時に初見の手順をぶっつけ本番でやることになります。**「VM 復元」も別途 CT-35b として年 1 回試験すること**（12.6.4b）。
+
+#### 12.6.3 [判] バックアップ規約
+
+| # | 規約 | 理由 |
+|---|---|---|
+| **BK-a** | ⚠️⚠️ **稼働中のファイル単位コピー（`tar` / `rsync`）を「バックアップ」と呼ばない** | 一貫性が無く、**復元できないものを溜めることになります**（12.6.2 案 (i)） |
+| **BK-b** | **取得した世代ごとに Edge のバージョンを記録する** | **復元は同一版必須** [確]。版が分からないバックアップは**復元できません** |
+| **BK-c** | ⚠️ **`c8yedge upgrade` の直前に必ず取得する** | アップグレード失敗時の唯一の戻り道。⚠️ **アップグレード後のバックアップでしか新版には戻れず、旧版のバックアップは旧版でしか復元できません**（BK-b） |
+| **BK-d** | **バックアップは暗号化して保管する** | **中身は MongoDB 全体 ＝ 顔画像・監査レコード・特徴量に紐づく external ID**（12.6.6 / CU-30） |
+| **BK-e** | ⚠️ **保持世代数と破棄手順を決め、破棄を実行する** | **リテンション（§7.2）と削除バッチ（X-04）はバックアップに及びません。** 破棄しない限り個人情報は残り続けます |
+| **BK-f** | **復元手順を runbook 化し、定期的に実施する**（[担当範囲] RB-7） | ⚠️ **取得できていることと復元できることは別です。** 本構成の復元は「クリーン OS + 再インストール」なので**手順が長く、ぶっつけ本番では失敗します** |
+| **BK-g** | ⚠️ **設定は Git を正とし、バックアップに依存しない**（§13.1 / AS-1） | **設定（リテンション・ロール・スマートルール等）は Git 定義から再投入できます。** バックアップが必要なのは**再現できないもの＝実データ**です。この二重化は本構成の強みなので、**「バックアップが古い」場合でも設定だけは最新に戻せる**ことを runbook に明記してください |
+| **BK-h** | ⚠️ **バックアップの取得成功・世代数・最新取得時刻を監視する**（§12.7 ⑮） | **静かに止まるのがバックアップの典型的な壊れ方**です。⚠️ **判定は「ジョブの成否」ではなく「最新バックアップの経過時間 > RPO」**にしてください（削除バッチ ⑪ と同じ考え方） |
+| **BK-i** | ⚠️ **部分復元はできない前提で設計する** | 保全対象はクラスタ全体です。**「1 拠点だけ」「1 デバイスだけ」戻すことはできません**。個別復旧が要る事象（誤削除等）は、**バックアップではなく §13 の Git 定義と再投入で対処する**設計にしてください |
+| **BK-j** 〈rev.4〉 | ⭐ **世代ごとに、同一バージョンのインストーラ一式（`c8yedge` バイナリ ＋ 閉域用オフラインパッケージ `c8yedge.tar`）を保管先に併置する** | 復元は **`sudo c8yedge install --version <previous_version>`（閉域は `-s c8yedge.tar`）** [確] ＝ **当該版のインストーラが無いと復元できません**。⚠️ しかも **アップグレードは連続メジャー間のみ** [確]（*"Edge supports upgrades only between consecutive major releases"*）で、**ロールバック・ダウングレード手順は存在しません**（rev.4 で manage-edge 全文を `rollback|downgrade` で確認・0 件）。**閉域網では障害発生後にダウンロードで取り寄せることもできません** |
+| **BK-k** 〈rev.4〉 | ⚠️ **ハイパーバイザ上のスナップショット残置を「バックアップ」と呼ばない。エクスポート完了後は即時削除する** | スナップショットは**同一ストレージ上の差分**であり、①ストレージ全損に対して無力 ②チェーンが伸びるほど I/O 性能が劣化し統合失敗リスクが増える。**保管先へエクスポートされて初めて 1 世代**です（BK-a と同じ「つもりバックアップ」の亜種） |
+| **BK-l** 〈rev.4〉 | ⭐ **テナント CA 作成（§13.3.5 D-10）の直後・最初のデバイス登録の前に、必ず 1 世代取得する** | **CA の実体（証明書＋秘密鍵）はテナントデータ内** [確]（*"The private key is stored in an encrypted tenant option."*）。**CA 作成より古い世代にしか戻れない場合、CA が消えて全デバイスの証明書が検証不能**になり、全拠点の再エンロールになります（12.6.4 RS-1）。この 1 世代が「デバイス登録を始めてよい」ゲートです |
+| **BK-m** 〈rev.4〉 | ⭐ **③の「日次7世代＋週次4世代」は GFS 方式（週次は日次バックアップのうち週内の1本を長期保持ラベルへ昇格・複製ではない）とする。遡及日数は最大約28日（週次4世代分）で、日次7世代はこの範囲に包含される** | 〈rev.4 訂正 — レビューで「遡及約35日」の内訳計算が本文に無いと指摘され検算。日次7日と週次28日を単純加算した35日は、両者が重複しない設計を前提とした場合にのみ成立するが、その前提は明記されていなかった。**標準的なGFS方式（週次が日次の範囲を包含する）を正とし、28日に訂正する。** 12.6.2b③・12.6.6 の日数もこれに統一 |
+
+#### 12.6.4 ⚠️⚠️ リストア後に起きること — 「戻せば元通り」ではありません
+
+**[判] リストアは時刻を T-Δ に巻き戻します。デバイス・案件アプリ・外部システムは巻き戻りません。** この非対称から次が発生します。**runbook に復旧後手順として組み込んでください。**
+
+| # | 事象 | 何が起きるか | 対応 |
+|---|---|---|---|
+| **RS-1** | ⚠️⚠️ **T-Δ 以降に発行されたデバイス証明書がテナントに存在しない** | §3 は certificate-authority（EST）でデバイスを登録します。**巻き戻すと、その間に登録・更新された拠点のデバイスが接続できなくなる可能性があります**（前提 3 / SV-08 に依存）。⭐ 〈rev.4 で見通し改善〉**再接続できる見込みが立ちました [推]**: ①CA の実体はテナントデータ内 ＝ **バックアップに含まれ、リストアで同一 CA が戻る** [確] ②接続時の照合は **trusted CA へのチェーン検証** [確] なので、CA が同一なら T-Δ 以降に発行された証明書も検証は通る ③CA 機能は **auto-registration が既定で ON** [確]（*"The certificate is stored in the trusted certificate repository with auto-registration turned on by default."*）なので、**消えたデバイスユーザーは初回 MQTT コールで自動再作成される** [確]。⚠️ 前提が 2 つ: **CA 作成が T-Δ より前**（→ BK-l）、**auto-registration を OFF にしていない**（→ **[判] OFF にしないこと**。OFF だと T-Δ 以降のデバイスは登録レコードが無く接続不能） | **[要検証] CU-34** — 上記 [推] を **CT-35(c) で実測**して確定。⚠️ **T-Δ 以降に作られた MO・child device 構成・ツイン**は失われたままなので、**thin-edge 側の再登録挙動（エンティティ再作成）も同時に観測すること**。再エンロールが要る結論なら拠点に人を出すことになり RTO に直結します |
+| **RS-2** | **thin-edge が網断中と同じ挙動で再送する** | ストア&フォワードにより、**T-Δ 以降のイベント・計測が再送されます**。⭐ **`time` が事象時刻で固定されていれば（§6.9 TM-a）データは正しく埋まります** | **TM-a が守られていることが復旧品質を決めます。** ⚠️ **mosquitto 既定 1000 件を超えた分は欠落します**（SV-44）→ Δ の上限を決める根拠 |
+| **RS-3** | ⚠️ **アラーム状態が巻き戻る** | CLEARED にしたアラームが ACTIVE に戻ります。**未対応アラームが再出現し、運用者は「対応済みのものを再対応」します** | 復旧後に**アラーム棚卸し**を runbook 手順に入れる |
+| **RS-4** | ⚠️ **PENDING オペレーションが再実行される** | T-Δ 時点で PENDING だったオペレーション（モデル配布・設定配布）が**もう一度デバイスへ流れます** | ⚠️ **復旧直後は §4.10 G-1 のキルスイッチを先に引き、棚卸ししてから解除する**手順にしてください |
+| **RS-5** | ⚠️ **Notification 2.0 のサブスクリプションとコンシューマ位置が巻き戻る** | 案件アプリへ**重複配信**が起きます。逆に、購読を解除したはずのコンシューマが復活します | 復旧後に §10.5 の棚卸し（N-04 / CT-30）を実施。**案件アプリ側の冪等性が前提になる**ことを [連携仕様] に明記 |
+| **RS-6** | ⚠️⚠️ **リテンションで消えたはずのデータが復活する** | 90 日を過ぎて削除されたイベント・画像・監査レコードが**戻ります**。⚠️ **個人情報の保存期間の観点では違反になりえます** | **復旧後にリテンションが再走して消えることを確認する**（§7.2 の削除は定期実行）。⚠️ **「戻した直後は保存期間超過のデータが存在する」ことを法務と合意しておく**（CU-30） |
+| **RS-7** | ⚠️ **監査レコードが巻き戻る** | 「Audit API に `PUT`/`DELETE` が無いので改竄不能」（§15.3）という性質は**リストア経路では成立しません** | **リストアの実施自体を、Cumulocity の外側（§12.7 の監視系）に記録する** |
+| **RS-8** | **ライセンス・ドメイン・TLS はバックアップに含まれる** | 復元先で**同じドメインを名乗る**必要があります（ライセンスはドメインに紐づく・P-3） | 復元先の DNS / 証明書を runbook に含める |
+| **RS-9** | ⚠️ **画像バイナリとイベントの整合**（CU-18 で案 (D) を採る場合） | バイナリ MO とイベントは同じ MongoDB にあるため**同時に巻き戻ります**（整合は保たれる）。⚠️ **ただしオブジェクトストレージ（案 (A)/(A′)）は巻き戻りません** → **Cumulocity 側の参照 ID とストレージ実体がずれます** | 案 (A)/(A′) を採る場合、**復旧後に参照 ID の突合を行う**手順が要る |
+
+#### 12.6.4b 復元手順の骨子 〈rev.4 で追加 — BK-f の「runbook 化」の実体。旧称「runbook RB-BK2」は削除（理由は §12.6.2b 訂正注記と同じ）〉
+
+**発動判断** [判]: リストアは**最後の手段**です。次の順で当てはまるものを先に使ってください。
+
+| 事象 | 対処 |
+|---|---|
+| 設定の誤投入・誤変更 | **Git 定義から再投入**（BK-g / §13）。リストアしない |
+| 個別データの誤削除 | **復旧不能と扱う**（BK-i — 部分復元はできない。全体を巻き戻すコストと RS-1〜9 に見合わない） |
+| Edge が起動しない・データ破損・ホスト/ディスク全損 | **リストア発動** |
+
+**復元経路の選択**〈rev.4 訂正 — 旧称「(R-A)/(R-B)」を「VM 復元」/「クリーン復元」に改称。R-01〜R-16 と紛らわしいラベルの解消に加え、「VM 復元」に手順が無くCT-35でも試験されないという指摘を受け、手順を追記した〉:
+
+```
+仮想化基盤は健在か?
+ ├─ はい → 【VM 復元】
+ │          ⭐ OS 準備・再インストール不要。RTO ③④⑤ が縮む
+ │          ⚠️ 戻した直後の VM は T-Δ 時点の自分として起動する
+ │          1. 保管先の最新世代（BK-k によりハイパーバイザ上のスナップショットは
+ │             既に削除済みのため、使う実体は「エクスポート済みフルイメージ」）を
+ │             仮想化基盤へインポート
+ │          2. 新規 VM として登録。ネットワーク設定・ホスト名・IP を元の VM1 と一致させる
+ │             （manifest の Edge CR エクスポート・§12.4 確認 2 と突き合わせる）
+ │          3. 起動 → K3s / Edge サービスが自動起動することを確認（CU-40 と同じ確認観点）
+ │          4. 両テナント URL でログイン確認
+ └─ いいえ（基盤ごと全損・別筐体へ復元）
+          → 【クリーン復元】（公式手順）:
+            1. 同一（または互換 [確]）OS をクリーンインストール
+            2. K3s / Edge のデータが残っていないことを確認 [確]
+            3. バックアップから /var/lib/rancher/k3s を復元
+               — paths / ownership / permissions を保持 [確]。ls -ld /var/lib/rancher/k3s で確認
+            4. sudo c8yedge install --version <manifest記載の版>   # 閉域: -s c8yedge.tar（BK-j で併置済み）
+            5. "Edge recovered successfully." を確認 [確]
+```
+
+> [要実機確認] 【VM 復元】の手順 1〜2（イメージインポート・VM 定義の再現手順）は仮想化基盤の製品によって具体コマンドが変わるため、P-0-8 の確認（仮想化基盤の特定）と同時に手順書へ落とし込むこと。
+
+**復旧後チェックリスト**（RS-1〜RS-9 の消化順。**順序に意味があります**）:
+
+| 順 | 作業 | 対応 RS |
+|---|---|---|
+| 1 | ⚠️ **§4.10 G-1 のキルスイッチを先に引く**（PENDING オペレーションの再実行を止める） | RS-4 |
+| 2 | **リストア実施を Cumulocity の外側（§12.7 の監視系・運用台帳）に記録する**（リストア自体は Edge 内の監査に残らない） | RS-7 |
+| 3 | 両テナント URL でログイン / `kubectl get pods -n c8yedge` 全 Running / DNS・TLS が復元先を向いている | RS-8 |
+| 4 | **デバイス再接続の確認** — 特に T-Δ 以降にエンロールした拠点（CU-34 の実証値がここで効く） | RS-1 / RS-2 |
+| 5 | **オペレーション棚卸し** → 問題ないものだけ再開し、キルスイッチを解除 | RS-4 |
+| 6 | **アラーム棚卸し**（CLEARED が ACTIVE に戻っている） | RS-3 |
+| 7 | **Notification 2.0 の購読棚卸し**（§10.5 N-04 / CT-30）＋ **案件アプリへ「重複配信が起きる」旨を連絡** | RS-5 |
+| 8 | **リテンションの再走を確認**（保存期間超過データが消えること。消えるまでの一時超過は CU-30 で法務合意済みであること） | RS-6 |
+| 9 | （案 (A)/(A′) 採用時）**オブジェクトストレージとの参照 ID 突合** | RS-9 |
+| 10 | ⭐ **バックアップジョブを再開し、復旧完了時点で新規 1 世代を取得する**（復旧直後が最も無防備） | — |
+
+> [判] **リストア試験（CT-35）は年 1 回以上 ＋ Edge アップグレードの都度、R-B 経路で実施**してください。試験のたびに本 runbook の所要時間を計測し、12.6.5 の RTO 実測値を更新すること（[担当範囲] RB-7 / W2-8）。
+
+#### 12.6.5 RTO / RPO の算定（SV-29 / TE-10 の入力）
+
+**[判] 本構成の RTO は「復旧作業時間」であって「サービス再開時間」ではありません。**
+
+```
+RPO ＝ バックアップ取得間隔（＋ 案 (ii) なら最後のチェックポイントまでの誤差）
+       ⚠️ ただし thin-edge のストア&フォワードが効く範囲では、実効的なデータ損失は
+          RPO ではなく「バッファ保持時間を超えた分」に縮む（RS-2）
+          → ⭐ バッファ容量（SV-44）が実効 RPO を決める。ここが本構成の特徴
+
+RTO ＝ ①障害検知      （§12.7 の監視で決まる）
+     ＋ ②判断・招集
+     ＋ ③OS 準備      （クリーンな状態にする。⚠️ 既存データがあってはいけない）
+     ＋ ④データ復元    （150GB 級の転送時間）
+     ＋ ⑤c8yedge install（公式ログ例では update 完了まで 3 分程度だが、要実測）
+     ＋ ⑥復旧後手順    （RS-1〜RS-9。⚠️ RS-1 が「拠点に人を出す」になると桁が変わる）
+```
+
+> ⚠️⚠️ **③④が効くため、RTO は分単位にはなりません。** 「Edge 停止許容時間」を BOX / thin-edge のバッファ保持時間の実測から決める（SV-29 / TE-10）とき、**RTO がそれを超えるならバッファを増やすか、冗長構成を検討する**ことになります。⚠️ **Edge は単一サーバ構成で HA がありません** [確] ので、**冗長化は「もう 1 台用意して手動で切り替える」以上のことはできません。**
+
+> ⚠️ **⑥の RS-1（証明書）が RTO の支配項になりうる**点に注意してください。CU-34 の結論次第で RTO が数時間から数日に変わります。
+
+#### 12.6.6 ⚠️⚠️ バックアップは個人情報を含みます
+
+保全対象は `/var/lib/rancher/k3s` 丸ごと ＝ **MongoDB 全体**です。したがって **スナップショット画像も監査レコードも、特徴量に紐づく external ID も入ります。**
+
+| # | 帰結 |
+|---|---|
+| **1** | ⚠️ **リテンションや削除バッチ（X-04）で画像を消しても、バックアップには残ります。** 「保存期間を守っている」と言えるのは**バックアップの保持世代と破棄手順まで設計したとき**だけです（§7.4 / BK-e） |
+| **2** | ⚠️ **リストアすると監査レコードが巻き戻ります**（RS-7）。「改竄不能」はリストア経路では成立しません |
+| **3** | ⚠️ **媒体の持ち出しは Cumulocity の監査ログに一切残りません。** S-15（Edge ホスト管理者）の統制と一体で考える必要があります（§11.1 / CU-29） |
+| **4** | ⚠️ **復旧直後は保存期間を超過したデータが一時的に存在します**（RS-6） |
+
+**[要決定] CU-30（§15.3）** — **暗号化・保管場所・アクセス制御・保持世代・破棄手順**を決め、**CU-5（保存義務期間）の適用範囲にバックアップを含めるかを法務に確認してください。**
+
+**[判] CU-30 への推奨案** 〈rev.4 で追加 — 法務確認の叩き台。確認が済むまで仮決定〉:
+
+| 論点 | 推奨 | 理由・注意 |
+|---|---|---|
+| **暗号化** | **保管先ストレージで at-rest 暗号化**（LUKS などのボリューム暗号化、またはバックアップ製品の暗号化機能）。転送経路も暗号化（閉域内でも平文で流さない） | バックアップ処理自体に暗号化を組み込むより、**保管先で一括して掛けるほうが手順が壊れにくい**。⚠️ 世代ファイル単位の暗号化を選ぶ場合、**鍵を失った世代は復元不能** — 復元試験（CT-35）は**必ず暗号化込みで**実施すること |
+| **鍵管理** | **§12.4 確認 4 の admin エスクローと同じ体系で、別封筒として保管**。鍵の交換（ローテーション）時は**旧鍵で読める世代が残っている間、旧鍵を破棄しない** | 鍵とデータを同じ場所に置かない。**鍵の喪失 ＝ 全世代の喪失**であり、バックアップの単一障害点は媒体ではなく鍵になる |
+| **アクセス制御** | **保管先へアクセスできる者を名簿化し、S-15（Edge ホスト管理者）の統制（CU-29）と同一の枠組みに載せる**。取り出し（リストア・試験・監査）は **Cumulocity の外側の台帳に記録** | **媒体の持ち出しは Cumulocity の監査ログに一切残りません**（帰結 3）。バックアップは「MongoDB 全体のオフライン写し」なので、**アクセス統制の水準は本番 DB と同格**が原則 |
+| **破棄** | **世代ローテーション（12.6.2b ③）による自動削除を一次手段**とし、**媒体の交換・廃棄時は暗号消去（鍵の破棄）または物理破壊**。破棄の実施も台帳に記録 | BK-e の実体。**「ローテーションから漏れた手動コピー」が最大の抜け穴** — アップグレード前の臨時世代（BK-c）や試験用コピーも台帳・破棄の対象に含めること |
+| **法務確認の論点**（確認リスト） | ① CU-5（保存義務期間）の適用範囲に**バックアップを含めるか** ② **最悪残存期間 ＝「元データの保存期間 ＋ 世代保持日数（最大約 28 日・12.6.2b ③ / BK-m）」**を許容するか ③ リストア直後に**保存期間超過データが一時的に復活する**（RS-6）ことの扱い ④ 特定個人からの**削除請求にバックアップ内は応じられない**（BK-i と同型 — 部分削除も不可能）ことの扱い | ⚠️〈rev.4 訂正〉②③④は**「12.6.2b の推奨設計（世代保持12・個人情報を含む方式）を採る限り」回避不能**という条件付きの主張であり、無条件の技術的不可能ではない。**回避策は存在する**（世代保持を短くする、または CU-18 (A) 系を採ってバックアップから個人情報を除く）が、**いずれも RPO の悪化・画像アクセス監査の要件放棄という別のコストを伴うため、本節では採らずに提示する**。**「現行推奨設計を前提にすると、このコストは技術的に避けられない」ということを法務へ提示するのが本節の役割** |
+
+#### 12.6.7 検証
+
+| # | 試験 | 合格条件 |
+|---|---|---|
+| **CT-35** 〈rev.3〉 | ⭐⭐ **リストア試験**（§12.4 確認 7 / [担当範囲] W2-8） | ⚠️ **「復元コマンドが完走した」を合格条件にしないでください。**<br>**(a)** 別筐体（クリーン OS）へ復元し、`Edge recovered successfully.` を確認<br>**(b)** **両テナント URL でログインでき、デバイス・グループ・リテンションルール・スマートルールが復元前と一致する**<br>**(c)** ⭐ **実デバイス（thin-edge）1 台が復元後の Edge に再接続でき、データが流れる**（RS-1 の実証）<br>**(d)** **復元に要した時間を計測し、RTO の実測値とする**（12.6.5 ③④⑤）<br>**(e)** **RS-3 / RS-4 / RS-5 が実際に起きることを観測し、復旧後手順に反映する** |
+| **CT-36** 〈rev.3〉 | ⭐ **バックアップ一貫性の検証**（CU-33 の方式決定後） | **負荷をかけた状態**（デバイスからデータを流しながら）で取得したバックアップから復元し、**MongoDB と K3s の両方が正常起動すること。**<br>⚠️ **静止状態で取ったバックアップだけで試験すると、案 (i) の欠陥を見逃します** |
+| **CT-35b** 〈rev.4〉 | **【VM 復元】経路の試験**（12.6.4b。年 1 回、CT-35 とは別日程で） | 仮想化基盤上でイメージインポート → VM 定義再現 → 起動 → 両テナントログインまで完走すること。**手順 1〜2 の具体コマンドを runbook に固定化できていること**（[要実機確認]の解消）。⚠️ **CT-35 が「クリーン復元」のみを試験対象とするため、より高速な「VM 復元」を無試験のまま本番に温存しない** |
+
+> ⚠️ **CT-35 の成功を §13 に進むゲートにしてください**（§12.4 確認 7）。**[要 SV-29] RTO/RPO を数値で決め**、BOX と thin-edge のバッファ保持時間を実測して「Edge 停止許容時間」として明記してください。
 
 ### 12.7 Edge 自身の監視
 
@@ -2705,7 +3133,7 @@ sudo c8yedge config --set-file tlsSecret.tls.key=<path-to-key> \
 |---|---|---|
 | **1** | **Otel Collector の prometheus receiver で取り込む** | OTLP ネイティブ出力は未記載。これが正攻法 |
 | **2** | ⭐ **アラート通知先を Cumulocity の外側に持つ** | **変-2 でメールが無いため、これが基盤異常の唯一の検知経路**（SV-34 / TB-5） |
-| **3** | **監視対象に含めるもの** | ①Edge 自体の死活 ②`c8y_Application_Down` / `_Unhealthy` ③**デバイス証明書の有効期限**（§3.6）④**Notification 2.0 のサブスクライバ数・バックログ量**（**公式 UI に危険域つきの画面あり** — §10.5。**Used backlog 80% でアラート**）⑤ディスク使用率 ⑥PENDING オペレーション件数（§4.11）⑦⭐ **Edge サーバー証明書（`<domain>` / `management-<domain>`）の残存期間**（§12.5）⑧⭐ **オフロードジョブの成功／失敗とラグ**（§7.5。**サイレント失敗が 90 日続くとデータが恒久的に失われる**）⑨ **`te/errors` に出る拒否メッセージ**（§6.7）⑩ **[要 SV-50]** ライセンス期限（存在する場合） |
+| **3** | **監視対象に含めるもの** | ①Edge 自体の死活 ②`c8y_Application_Down` / `_Unhealthy` ③**デバイス証明書の有効期限**（§3.6）④**Notification 2.0 のサブスクライバ数・バックログ量**（**公式 UI に危険域つきの画面あり** — §10.5。**Used backlog 80% でアラート**）⑤ディスク使用率 ⑥PENDING オペレーション件数（§4.11）⑦⭐ **Edge サーバー証明書（`<domain>` / `management-<domain>`）の残存期間**（§12.5）⑧⭐ **オフロードジョブの成功／失敗とラグ**（§7.5。**サイレント失敗が 90 日続くとデータが恒久的に失われる**）⑨ **`te/errors` に出る拒否メッセージ**（§6.7）⑩ **[要 SV-50]** ライセンス期限（存在する場合）<br>〈rev.3 で追加〉⑪ ⭐ **画像削除バッチ（X-04）** — ⚠️ **判定は「バッチの成否」ではなく「`GET /inventory/binaries?type=<画像用type>` の最古 `creationTime` が保存期間を超えていないこと」**。バッチが「成功して 0 件削除」でも異常は起こりえます（§7.4）<br>⑫ **break-glass のログイン** — `GET /audit/auditRecords?type=UserAuthentication&user=<break-glass>`。§11.5 R-07 は「使用時アラート」を要求しているが、変-2 でメールが無いため**実現手段が未定**（SV-34 / TB-5 に紐づけること）<br>⑬ **マイクロサービスのデプロイ** — `type=Application` の監査レコード。**R-14 の差し替えは実質 `ROLE_AUDIT_ADMIN` の取得と同じ**（AS-15）<br>⑭ **MO の削除** — `type=Inventory`。⚠️ **R-04a の `Inventory ALL` は cascade 削除を含みます**（§11.3）<br>⑮ ⭐ **バックアップ**（§12.6 BK-h）— **判定は「ジョブの成否」ではなく「最新バックアップの経過時間 > RPO」**。併せて**世代数**と**保管先の空き容量**。⚠️ **静かに止まるのがバックアップの典型的な壊れ方**で、気づくのは復旧が必要になった瞬間です<br>〈rev.4 で追加〉⑯ **時刻ずれ** — Edge ホスト・Keycloak・デバイスの NTP 同期状態（P-0-3 は「設定せよ」だけで**ずれの検知が監視対象に入っていませんでした**。ずれると TLS 判定・JWT `exp`/`iat`・イベント突合が同時に壊れ、エラーから原因に辿り着けません — §6.9 TM-c） |
 | **4** | ⚠️ **メタ監視の向き** | 構成図は `保守端末 → VM1`（pull）。**D9「自社側から拠点への着信接続は設けない」とは逆向き**。VPN 内なら D9 の例外に収まるが、**FW 審査と攻撃面の観点で設計判断として再確認が必要**（SV-23） |
 
 > ⚠️ **[要 TB-5] 誰が刈り取り、誰に通報するかが未確定です。** これが決まらないと、**基盤自身の異常が誰にも届きません。**
@@ -2746,7 +3174,7 @@ sudo c8yedge config --set-file tlsSecret.tls.key=<path-to-key> \
 
 **次がすべて ✅ になるまで §13 の設定投入に進まないでください。**
 
-- [ ] §12.2 の P-0-1〜P-0-6 / P-2 / P-3 が確定し、記録されている
+- [ ] §12.2 の **P-0-1〜P-0-7** / P-2 / P-3 が確定し、記録されている 〈rev.3 で修正 — P-0-7（MongoDB 容量。増やせるが減らせない）がこぼれていた〉
 - [ ] §7.6 の容量サイジングが完了し、`storageClassName` と MongoDB 容量に反映されている
 - [ ] 両テナント URL でログイン可能
 - [ ] Edge CR がエクスポートされ Git にコミットされている
@@ -2755,8 +3183,181 @@ sudo c8yedge config --set-file tlsSecret.tls.key=<path-to-key> \
 - [ ] `c8yedge-operator-config`（`ca.crt` / `no_proxy`）が適用され operator が再起動されている
 - [ ] Apama-ctrl / Smartrule が稼働している
 - [ ] ⭐ **Messaging Service が実際に動作している**
-- [ ] ⭐ **スナップショット取得とリストア試験が成功している**
-- [ ] 検証環境で §0.7 の前提 2〜4 に結論が出ている
+- [ ] ⭐⭐ **CT-35 リストア試験が成功している**（§12.6.7）⚠️ **「復元コマンドが完走した」では不十分** — 別筐体への復元・両テナントログイン・**実デバイスの再接続**・**所要時間の実測**まで<br>  ⚠️ **カメラの静止画スナップショット（§6.8）とは別物です**〈rev.3 で改称〉
+- [ ] **CU-33（バックアップ取得方式）が決まり、CT-36（負荷をかけた状態での一貫性検証）が成功している** 〈rev.3〉
+- [ ] **P-0-8（仮想化基盤の原子スナップショット可否）が確認されている** 〈rev.3〉
+- [ ] **RS-1〜RS-9（リストア後手順）が runbook 化されている**（[担当範囲] RB-7）〈rev.3〉
+- [ ] 検証環境で §0.7 の**前提 2〜8** に結論が出ている 〈rev.3 で範囲拡大〉
+- [ ] **CT-5b / CT-5c を実施済み**（前提 9 / CU-18 で (D)/(B) を残す場合。§14.2）〈rev.3〉
+- [ ] **前提 9（CU-18）が合意されている**、または「§13.3.6 の `AUDIT` 行を実行しない」ことが明示的に決まっている 〈rev.3〉
+- [ ] **CU-36（ホスト OS のディストリビューションと版）が確定・記録されている**（§12.10.4 — 復元先の「同一または互換 OS」の判定基準になる）〈rev.4〉
+
+### 12.10 運用設計 — 定常運用と計画作業 〈rev.4 で新設〉
+
+**なぜこの節が要るか**: rev.4 で 3 文書（本書 / [担当範囲] / [設定書]）を横断調査した結果、運用作業が **① [担当範囲] §10.3 の runbook 一覧 ② §12.7 の監視項目 ③ 各所に散在する「定期」「runbook 化せよ」の記述** の 3 箇所に分かれ、**相互に参照されていない**ことが分かりました。その結果、**Edge 本体のアップグレード・計画停止・ホスト OS のパッチ・TLS 証明書の更新周期・ライセンス更新・アカウント棚卸し・監査ログレビューが「どこにも属さない作業」として欠落**していました。本節が Cumulocity Edge 側の運用設計の受け皿です。**担当・時期の確定は [担当範囲] が正**（§0.2）— 本節の [判] は [担当範囲] への起票内容を含みます。
+
+#### 12.10.1 運用作業カタログ
+
+**[判] 周期はすべて初期値の提案です。**「手順の所在」列が太字（**rev.4 で新設** / **runbook 未**）の行が、rev.4 まで設計から欠落していた作業です。
+
+| 作業 | 周期（[判] 初期値） | 手順の所在 | 監視との対応 |
+|---|---|---|---|
+| バックアップ取得 | **日次** ＋ イベント駆動 4 点 | §12.6.2b（[担当範囲] RB-7 の実体・正式番号は §12.10.6 で起票） | §12.7 ⑮ |
+| リストア試験（DR 訓練） | **年 1 回 ＋ アップグレードの都度**（クリーン復元経路）＋ **年 1 回**（VM 復元経路・CT-35b） | §12.6.4b（[担当範囲] RB-7） | — |
+| Edge 本体アップグレード | **年 1 回以上**（連続メジャー追従） | **§12.10.2（rev.4 で新設）** | §12.7 ② |
+| Edge TLS 証明書更新 | 発行有効期間に従う（**残 30 日で着手**） | §12.5（コマンド）＋ **runbook 未**（12.10.6 で起票） | §12.7 ⑦ |
+| テナント CA 更新日対応（10/2） | 年 1 回 | [担当範囲] RB-4 | §12.7 ③ |
+| ホスト OS パッチ | **月次確認・四半期適用**（再起動を伴うものは計画停止枠） | **§12.10.4（rev.4 で新設）** | — |
+| アカウント・アクセス権棚卸し | **四半期** | **§12.10.7（rev.4 で新設）** | §12.7 ⑫ |
+| 監査ログレビュー | **月次** | **§12.10.8（rev.4 で新設）** | §12.7 ⑫⑬⑭ |
+| Notification コンシューマ棚卸し（N-04） | 四半期（購読の増減があれば随時） | §10.5 / [担当範囲] RB-10 | §12.7 ④ |
+| インベントリ整合検査 | CI 毎回 ＋ 検査 5 は日次 | §3.10 / §13.7 AS-9 | — |
+| 容量・スケールの再算定 | **半期 ＋ 拠点追加のたび ＋ MongoDB 容量増設のたび**〈rev.4 訂正〉 | §7.6 の算出手順を再実行（トリガ: §12.7 ⑤ が警告域に入ったとき）。**このとき §12.6.2b④ のバックアップ保管容量（実ディスクサイズ×12世代）も同時に再計算すること** — MongoDB は増やせるが減らせず（P-0-7）、ディスク実サイズが変わるたびにバックアップ容量計画が追随しないと保管先が慢性的に不足する | §12.7 ⑤ |
+| ライセンス期限確認 | SV-50 の回答待ち（期限があるなら**残 90 日で発注**） | §12.2 P-3 ＋ **runbook 未**（12.10.6） | §12.7 ⑩ |
+| シークレットローテーション | R-08 は [担当範囲] RB-13。**サービスユーザーは年 1 回** [判] | §11.4（再作成手順）＋ RB-9（CI 同期） | — |
+
+> ⚠️ **運用体制そのもの（要員数・当番・受付窓口・SLA・エスカレーション先）は 3 文書のどこにもありません。** 本書のスコープ（Cumulocity 側設計）でもないため、ここでは設計せず **[担当範囲] への起票事項**として明示します（12.10.6）。**SV-34 / TB-5（基盤異常の通報先）は「通報を受けた人が何をするか」まで含めて決めないと閉じません。**
+
+#### 12.10.2 Edge 本体のアップグレード運用 〈rev.4 で新設〉
+
+**[確] 前提となる製品仕様**（rev.4 で一次確認）:
+
+- *"Edge supports upgrades only between consecutive major releases. If your deployment is several major releases behind, you must upgrade to and validate each intermediate major release before proceeding to the target release."* — **メジャーはスキップできません**
+- **ロールバック・ダウングレード手順は存在しません**（manage-edge 全文を `rollback | roll back | downgrade` で走査して 0 件）。**戻し手段は「直前バックアップへのリストア」だけ**です（BK-c）
+- *"Upgrades with no downtime — No"* — **アップグレードは停止を伴います**
+- コマンド: `c8yedge upgrade` / `c8yedge upgrade --version <version>` / 閉域は `c8yedge upgrade -s "<OFFLINE-PACKAGE>"`
+
+**[判] 運用規約**:
+
+| # | 規約 | 理由 |
+|---|---|---|
+| **UP-a** | **年 1 回以上、リリースに追従する**（メジャーを溜めない） | スキップ不可のため、**放置すると多段アップグレード**になり、停止時間と検証工数が段数ぶん積算します。⚠️ 追従周期の確定には**ベンダーのリリースサイクルとサポート期限の書面確認が必要** → **[要確認] CU-35**（SV-50 と同じ照会経路で） |
+| **UP-b** | **検証環境で同一版・同一手順を先行し、thin-edge 互換（TE-2 のマトリクス）を確認してから本番** | 本番が初回実行にならないように。§14 の smoke（CT-1 相当）を検証環境で通す |
+| **UP-c** | **直前に BK-c のバックアップ、完了後すみやかに新版で 1 世代取得**（＝ §12.6.2b②のイベント駆動 4 点の (a)(b)そのもの。ここでの UP-c は同じ規約への参照であり、別途の取得を追加するものではない）〈rev.4 訂正 — レビューで「§12.6.2bは3点と数えているのにUP-cが4点目を課しており矛盾」と指摘され、§12.6.2b②を4点に修正して整合させた〉 | **旧版バックアップは旧版でしか復元できず**（BK-b）、**アップグレード完了の瞬間から「新版の世代」が 1 つも無い状態**になるため |
+| **UP-d** | **「アップグレード失敗の戻し」は障害リストアと同じ重さとして計画する** | 戻し ＝ リストア（12.6.4b）＝ **RS-1〜RS-9 が全部付いてきます**。**停止許容時間内に収まらない前提**で、失敗時は「戻す」より「前に進めて直す」が第一選択になるよう、UP-b の事前検証に重心を置きます |
+| **UP-e** | **閉域では新版オフラインパッケージ（`c8yedge package` の成果物）を事前入手し、検証環境で使った同一物（チェックサム一致）を本番に使う。入手物は BK-j の保管体系に載せる** | Edge 側のバイナリ持ち込み運用はこれまで**未設計**でした（thin-edge 側の TE-17 に相当する Edge 側の欄） |
+| **UP-f** | **アップグレードは計画停止（12.10.3）として扱う** | *"Upgrades with no downtime — No"* [確] |
+
+**手順骨子**（runbook 化して [担当範囲] §10.3 へ — 12.10.6）: 事前（CU-35 確認 → パッケージ入手・検証 → 検証環境通過 → BK-c → 告知）→ 実施（計画停止枠で `c8yedge upgrade`）→ 確認（§12.4 確認 1〜7 の再実施）→ 事後（新版バックアップ・manifest 更新・§12.7 の監視が全項目復帰していること）。
+
+#### 12.10.3 計画停止・起動 〈rev.4 で新設〉
+
+**[確] Edge に停止・起動コマンドはありません**（§12.6.1）。K3s の停止は K3s 公式手順（`systemctl stop k3s` → `k3s-killall.sh`・§12.6.2b）に乗ります。
+
+**停止中に起きること**: デバイス → mosquitto バッファに蓄積（**上限超過で欠落** — SV-44）／案件アプリ → 通知断・API 断／UI 断。**復旧時**: 溜まった再送とアラームが集中します（§8.4 リプレイ抑止・§5 の死活アラーム）。
+
+**[判] 規約**:
+
+| # | 規約 | 内容 |
+|---|---|---|
+| **ST-a** | **停止ウィンドウは「Edge 停止許容時間」以内** | 許容時間は BOX / thin-edge のバッファ保持時間の実測から決める（SV-29 / TE-10 — 12.6.5 と同じ入力）。**実測が済むまで計画停止を予定しない** |
+| **ST-b** | **停止・起動の標準手順**: ①事前告知（案件アプリ担当含む）②§4.10 G-1 キルスイッチ（進行中オペレーションの抑止）③（作業内容が要求するなら）バックアップ取得 ④`systemctl stop k3s` → `k3s-killall.sh` ⑤ホスト作業 ⑥起動 → §12.4 確認 1〜7 ⑦キルスイッチ解除 ⑧再送・アラーム消化を観測（§8.4 のルールが効いていること） | リストア復旧後チェックリスト（12.6.4b）の縮退形。**②を飛ばすと、復旧直後に PENDING オペレーションがデバイスへ流れます** |
+| **ST-c** | **ホスト再起動（OS パッチ等）は ST-b の縮退形として扱う** | K3s は systemd サービスとして自動起動する [推] — ⚠️ **無操作で Edge が完全復帰するかは実機確認が要ります** → **[要確認] CU-40**（W1。⑥の確認項目で合否判定） |
+
+#### 12.10.4 ホスト OS の運用 〈rev.4 で新設 — 従来 0 件〉
+
+rev.4 の横断検索で、**Edge ホストの OS パッチ・カーネル更新・OS アップグレード・再起動手順は 3 文書に 1 行も無い**ことを確認しました（検索語: OS パッチ / カーネル / kernel / reboot / RHEL / Ubuntu ほか — ヒットはすべて thin-edge・operator 再起動の文脈）。
+
+| # | [判] 規約 | 内容 |
+|---|---|---|
+| **OS-a** | **ディストリビューションと版を確定し、記録する** → **[要決定] CU-36** | 公式は *"consult the operating system configurations required by K3s"* [確] ＝ **K3s のサポート OS から選ぶ**。⚠️ **復元先の「同一（または互換）OS」[確] の判定基準になる**ため、**版まで台帳に記録**（バックアップ manifest・12.6.2b と同じ台帳）。検証環境と本番で揃えること |
+| **OS-b** | **セキュリティパッチは月次で確認し、再起動を伴うものは四半期の計画停止枠（ST-c）で適用** | 閉域網のため自動更新は無い。パッチ持ち込みは thin-edge 側 TE-17 と同じ社内リポジトリ経路に相乗りする |
+| **OS-c** | **OS のメジャーアップグレードは in-place ではなく「別筐体に新 OS を立て、R-B 経路（12.6.4b）でリストア」を正とする** | ①in-place 失敗時の戻しが無い ②**リストア手順の実地訓練を兼ねる**（CT-35 の実施機会）③「クリーンな状態に復元」という公式復元手順と同型で、サポート面の説明がつく |
+| **OS-d** | **K3s・containerd を OS のパッケージ管理で入れない・更新しない** | K3s は Edge インストーラが同梱・管理します。OS 側で `containerd` / `runc` を別途入れると競合します [推] |
+| **OS-e** | **Edge / K3s / OS の脆弱性情報の受け口と対応期限を決める** → **[要決定] CU-37** | 現状、脆弱性対応のリードタイムが設計されているのは**画像解析装置（thin-edge）側だけ**（[担当範囲] TE-17）。Edge 本体・K3s・ホスト OS の CVE は**誰も受信していません**。ベンダー通知の登録先・深刻度別の適用期限（例: Critical は次回を待たず臨時の計画停止枠）を決めること |
+
+#### 12.10.5 監視しきい値の初期値カタログ 〈rev.4 で新設〉
+
+**§12.7 は「何を見るか」を定義しましたが、数値のしきい値が書かれているのは Used backlog 80% だけでした。** 以下はすべて **[判] 初期値** — 運用開始 1 か月と CT-28（負荷試験）の実測で見直してください。
+
+| §12.7 の項目 | [判] 初期しきい値 | 根拠 |
+|---|---|---|
+| ① Edge 死活 | scrape 連続 3 回失敗で危険 | 誤検知（単発のネットワーク断）と全断の分離 |
+| ③ デバイス証明書期限 | 残 **30 日**警告 / **14 日**危険 | 拠点に人を出す判断のリードタイム（§3.6） |
+| ④ Notification バックログ | **Used backlog 80%** で警告 [確]（公式 UI の危険域） / Last ack ≥ 1 day | §10.5 の公式画面と同値 |
+| ⑤ ディスク使用率 | **70%** 警告 / **85%** 危険 | 警告域で §7.6 の再算定（12.10.1）を発動し、**MongoDB 増設（増やせるが減らせない）の判断時間**を確保する。⚠️ 増設の実コマンドと再起動要否は **[要確認] CU-41** |
+| ⑥ PENDING オペレーション | 通常ピークの 2 倍（実測前は **100 件**） | §4.11 の滞留検知 |
+| ⑦ Edge TLS 証明書 | 残 **30 日**警告 / **14 日**危険 | 失効 ＝ 全拠点・全アプリ同時全断（§12.5） |
+| ⑧ オフロードラグ | **7 日**超で警告 | 90 日リテンションに対する余裕（§7.5 — 失敗が 90 日続くと恒久喪失） |
+| ⑨ `te/errors` | 1 件でも記録・日次レビュー（実測後に閾値化） | 拒否は仕様不整合のシグナル（§6.7） |
+| ⑩ ライセンス期限 | 残 **90 日**警告（SV-50 で期限が確認されたら） | 発注・書面手続きのリードタイム |
+| ⑪ 画像削除バッチ | 最古 `creationTime` > 保存期間 **+ 1 日** | §7.4 の判定式そのまま |
+| ⑫ break-glass ログイン | **1 件で即時通報** | §11.5 R-07（使用時アラート） |
+| ⑮ バックアップ | 最新世代の経過時間 > **28 時間**（RPO 24h + ジョブ実行時間・開始時刻ばらつきに対するマージン 4h。⚠️〈rev.4 訂正〉当初 26h としていたが、150GB 級のフルイメージエクスポートは「数十分〜時間単位」の変動があり、2h マージンでは取得成功時にも誤検知しうるため広げた）/ 世代数 < 計画値 / 保管先空き < 1 世代ぶん | BK-h・12.6.2b。⚠️ **実装経路が未定義** → **[要確認] CU-42**〈rev.4〉: バックアップジョブは Edge operator の `:3443/metrics`（§12.7 冒頭）の管轄外（ホスト OS 上で動く自前ジョブのため）。**[判] 推奨**: ジョブ完了時に取得時刻・世代数・保管先空き容量を **node_exporter の textfile collector 形式でホスト上に出力**し、Otel Collector の該当 receiver で拾う（Edge 本体のメトリクスパイプラインとは別系統として明示的に構築する） |
+| ⑯ 時刻ずれ | **1 秒**警告 / **30 秒**危険 | TLS・JWT の時刻判定余裕（P-0-3）。デバイス側は `time` の品質（TM-a）にも直結 |
+
+#### 12.10.6 期限台帳と runbook 追補 — [担当範囲] への起票 〈rev.4 で新設〉
+
+**期限・鍵の台帳**（[判] Git 管理。`secrets/` と同じく**値は置かずメタデータのみ**）: Edge TLS 証明書（2 ホスト名）／社内 CA ルート／テナント CA（毎年 10/2）／デバイス証明書の失効分布（§3.6）／ライセンス（SV-50 待ち）／R-08・サービスユーザーのローテーション日／**バックアップ暗号鍵**（12.6.6 — 世代との対応）。**§12.7 の期限系監視（③⑦⑩）はこの台帳を正とする。**
+
+**[担当範囲] §10.3 への runbook 追補起票**（⚠️ **採番は [担当範囲] 側で行うこと** — 本書が RB-14〜を勝手に振ると CU-17 と同じ ID 衝突を再生産します）:
+
+| 追補する runbook | 契機 | 手順の種 |
+|---|---|---|
+| **Edge TLS 証明書更新** | 定期（残 30 日） | §12.5 のコマンド + 事前告知 + 更新後の全断確認 |
+| **Edge 本体アップグレード** | 年 1 回以上 | §12.10.2 の手順骨子 |
+| **計画停止・起動**（OS パッチ含む） | 四半期 | §12.10.3 ST-b |
+| **ライセンス更新** | SV-50 の結果次第 | §12.2 P-3（`c8yedge config --set-file licenseKey=`） |
+| **ディスク増設**（MongoDB 容量拡張） | §12.7 ⑤ 警告時 | [要確認] CU-41 の結果 |
+| **監査ログ定期レビュー** | 月次 | §12.10.8 AU-a |
+| **Notification バックログ満杯（500 応答）からの復旧** | 障害 | unsubscribe による解放 → 再購読 → 欠落期間の特定（RB-11 と同型）。⚠️ **unsubscribe でバックログが即時解放されるかは実機確認**（CT-30 に追加） |
+| **データ誤削除時の影響特定** | 障害 | BK-i の帰結（個別復元不可）を前提に、影響範囲特定 → Git 再投入（設定）／オフロード先からの読み戻し可否（実データ・§7.5）→ 案件アプリへの通知 |
+
+> あわせて rev.4 で **[担当範囲] の参照誤り 2 件を本書側で訂正済み**（§11.5 の RB-11 → RB-9、§12.5 の RB-13 誤参照）。[担当範囲] 側の改訂時に突き合わせてください（§15.5 DOC-5）。
+
+#### 12.10.7 アカウント・アクセス権の定期棚卸し 〈rev.4 で新設 — 従来 0 件〉
+
+**入退社・異動の処理は 3 文書のどこにもありませんでした**（検索語: 入退社 / 棚卸 / アクセス権レビュー / joiner / leaver — ヒットは設計時の主体棚卸しとコンシューマ棚卸しのみ）。
+
+**構造上の前提** [確]: SSO ユーザーのロールは **Keycloak のグループクレームで毎ログイン時に解決**され、**手動付与は次回ログインで消えます**（§11.6）。したがって**人の入退社の一次処理は Keycloak 側**にあり、Cumulocity 側に残る棚卸し対象は**ローカルユーザー（admin ×2・break-glass・R-08・サービスユーザー）とロール割当の実機状態**です。
+
+| # | [判] 規約 | 内容 |
+|---|---|---|
+| **AC-a** | **四半期棚卸し**: ①ローカルユーザーの実機一覧 vs `users.json`（Git）の突合（AS-1 系で機械化可能）②グローバルロール割当が §11.2 の設計と一致（AS-13(c) は CI 済み — 残りを目視）③Inventory ロール割当 vs 拠点一覧 ④**休眠検出** — 最終ログインが 90 日超のアカウント（`GET /audit/auditRecords?type=UserAuthentication` で機械化） | **SSO 側が正しくても、ローカルユーザーは Cumulocity 側でしか検出できません** |
+| **AC-b** | **Keycloak 側と「退場 SLA」を合意する** → **[要決定] CU-38** | 退社から Keycloak アカウント無効化までの猶予中は **Cumulocity にログインできます**。SLA（例: 当日中）と、緊急時に Cumulocity 側で先に塞ぐ手段（該当ユーザーの無効化）を合意しておく |
+
+#### 12.10.8 監査ログの定期レビュー 〈rev.4 で新設〉
+
+§12.7 ⑫⑬⑭ は**自動監視**への落とし込みでした。**「人が読む」レビューはどこにも設計されておらず、しかも §11.1 のアクセス主体一覧に「監査担当」が存在しません**（S-1〜S-16 に無い — 誰がレビューするのか主体が未定義）。
+
+| # | [判] 規約 | 内容 |
+|---|---|---|
+| **AU-a** | **月次レビュー観点**: ①break-glass ログイン（0 件が正常）②`type=Application`（マイクロサービスのデプロイ — AS-15 の CI 結果と突合）③`type=Inventory` の削除 ④リテンションルールの変更（AS-11b と突合）⑤ロール・ユーザー変更 ⑥（CU-18 決定後）画像アクセスレコードのサンプル検査 | レビューは「§12.7 のアラートが鳴らなかったことの確認」ではなく、**閾値化できない異常（正規権限の悪用パターン）を人が見る**工程です |
+| **AU-b** | **レビュー結果は Cumulocity の外側の台帳に記録する** | 監査レコードの改竄不能性は**リストア経路では成立しません**（RS-7）。レビュー記録まで Cumulocity 内に置くと共倒れします |
+| **AU-c** | **レビュー主体は §11.1 の S-17（監査担当）。§11.2 の R-17 で `ROLE_AUDIT_READ` を付与する（rev.4 で追加済み）。AS-13(c) の CI 検査対象に R-17 を含めること** | 主体の棚卸しに存在しない役割は、権限設計からも漏れ続けます（rev.3 まで AS-13 が「監査担当」を参照しながら主体一覧にもロール定義にも不在でした） |
+
+#### 12.10.9 Keycloak・監視基盤への要求仕様 〈rev.4 で新設〉
+
+**Keycloak 本体は担当外**（[担当範囲] §1.2）ですが、**「Keycloak が止まると何が起きるか」がどの文書にも書かれていませんでした**。
+
+**停止影響** [推]: SSO ユーザー全員がログイン不可（既存トークンの失効まで漸進的に拡大）。**デバイス接続・データ収集・通知配信は影響を受けません**（証明書 / Basic 認証で Keycloak を経由しないため）。**唯一の管理経路は break-glass（§11.5）**になります。
+
+| # | [判] | 内容 |
+|---|---|---|
+| **KC-a** | **Keycloak 担当への要求仕様を文書で提示する** → **[要決定] CU-38 に含める** | ①可用性目標（Edge の RTO と整合させる — SSO 断が Edge 復旧のボトルネックにならないこと）②**Keycloak 自身のバックアップ**（realm 設定・ユーザー・グループ。**Edge のバックアップには一切含まれません**）③NTP（P-0-3）④Keycloak バージョンアップ時の互換確認項目（redirect URI・グループクレーム名・JWKS — 1 文字違いで全ユーザーがログイン不可・CU-9）⑤停止・メンテナンスの相互告知経路 |
+| **KC-b** | **「Keycloak 長時間障害」を break-glass の発動契機として §11.5 に紐づける** | RB-8（SSO からローカル認証への切り戻し）は**設定を戻す**手順であり、**障害中の一時運用**（break-glass で最小限の運用を続ける）とは別物です。混同しないこと |
+| **KC-c** | **監視基盤（Otel Collector / Prometheus）自身の死活を、監視基盤の外で検知する手段を 1 つ持つ**（例: heartbeat の不達検知を通報先側で） | 変-2 でメールが無い本構成では **§12.7 が基盤異常の唯一の検知経路**です。その §12.7 自身が沈黙したことを誰も検知できない構成は、BK-h で禁じた「静かに止まる」の再生産です。⚠️ **通報先・当番（SV-34 / TB-5）が決まるまで、本番デバイスの接続開始（W5 以降）に進まないことを推奨します** [判] |
+
+#### 12.10.10 Edge プラットフォームログの扱い 〈rev.4 で新設 — 従来 0 件〉
+
+**Edge 自身のログ（Pod ログ・operator・MongoDB・ingress）とホスト syslog の収集・保存はどの文書にもありませんでした**（§12.7 は Prometheus メトリクスのみ）。なお Edge CR の `storageClassName` 説明は PV の用途に *"application data, microservice images, and logs"* を挙げており [確]、**ログは PV 内 ＝ バックアップに含まれます**。
+
+| # | [判] 規約 | 内容 |
+|---|---|---|
+| **LG-a** | **平時は Pod ログを外部収集しない。障害調査時に取得する手順（`kubectl logs` / `journalctl -u k3s` / 対象 Pod の特定表）を runbook に持つ** | ①ログへの個人情報混入リスク（MS-f の禁則は自作サービスにしか効かない — プラットフォームのログに何が出るかは制御外）②収集すると `AUDIT` リテンションと `ROLE_AUDIT_READ` の保護の外に個人情報アクセスの痕跡を二重化しかねない（§15.3 の ingress ログ案を却下した理由③と同根） |
+| **LG-b** | **恒常収集するなら対象を絞って Otel Collector 経由**（operator と ingress のエラーレベルのみ等）→ **[要決定] CU-39** | 全量収集は保管・保護・保存期間の設計（それ自体が §7 級の作業）を伴います。**「収集しない」も設計判断として明記するのが本規約の趣旨** |
+| **LG-c** | **ホスト syslog / journald はホスト内ローテーション（OS 既定）とし、保存期間を OS-a の台帳に記録** | S-15 の操作痕跡（CU-29 の踏み台セッション記録と併せて）の最低限の保全 |
+
+#### 12.10.11 変更管理と検証環境の維持 〈rev.4 で新設〉
+
+**CF-a〜CF-f / AS-1〜AS-15（§13）で「実機と Git の乖離」は技術的に強く守られていますが、Git リポジトリ自体の運用ルールと、検証環境を「維持する」設計がありませんでした。**
+
+| # | [判] 規約 | 内容 |
+|---|---|---|
+| **CM-a** | **main ブランチ保護 + PR 必須 + レビュー 1 名以上**。実機への適用は CI からのみ（人は PR を出すところまで） | CF-a（UI 手作業禁止・D10）の Git 側の対。**リテンション短縮（不可逆・§7.2）と ロール変更は承認者を分ける**（M-9 の穴の受け皿） |
+| **CM-b** | **リリース単位はタグ**。CF-b のフェーズ先頭エクスポートと対にする | 切り戻しの起点（BK-g — 設定は Git が正） |
+| **CM-c** | **検証環境は W1 で使い捨てず、常設で維持する** | 用途: アップグレード先行（UP-b）・リストア試験（CT-35 の定期実施）・ルール/設定の事前検証（§8.7）・障害再現。⚠️ **ライセンスがもう 1 本要るかを SV-01 の商流確認に追加**すること |
+| **CM-d** | **本番適用は「検証環境で同一コミットを適用済み」をゲートとする**（CI で強制） | 「検証環境の構成が本番とずれていて意味がない」の防止は **CF-f（環境別 values は L1-C のみ）+ AS-1 の双方向差分**で機械的に担保する |
 
 ---
 
@@ -2794,7 +3395,7 @@ sudo c8yedge config --set-file tlsSecret.tls.key=<path-to-key> \
 | ~~§1.4 グループの external ID~~ | ~~**G-02**~~ **rev.2 で廃止**（G-04 に統合） | — | — | §13.3.3 |
 | §1.5 グループのフラグメント | **G-04**〈新〉 グループの `x_Site` | edge | L1-C | §13.3.3 |
 | §2 命名規約 | — | **設定ではなく規約文書 + バリデータ** | L1-B | §13.3.12 |
-| §2.8 機械検査 | **CK-1〜CK-6** | CI | — | §13.7 |
+| §2.8 機械検査 | **CK-1〜CK-8** | CI | — | §13.7 |
 | §3.3 オンボーディング方式 | **D-01** 登録方式（テナント CA） | edge | L1-C | §13.3.5 |
 | §3.3 テナント CA | **D-10**〈新〉 `certificate-authority` フィーチャー有効化 + CA 作成 | edge | L1-C | §13.3.5 |
 | §3.4 登録主体 | **R-08** 証明書アップロード用ローカルユーザー | edge | L1-B | §13.3.4 |
@@ -2926,6 +3527,9 @@ devices:
 | **R-11**〈新〉 | オフロードバッチ用 | 拠点横断 READ | 同上 | 同上 |
 | **R-12**〈新〉 | クリップ保存サービス用 | Alarms READ | 同上 | 同上 |
 | **R-13**〈新〉 | ⭐ **Cloud Remote Access ロール** | **どのロール・どのユーザーにも割り当てない** | — （**投入しないことが設定**） | **CI で検査**（§13.7） |
+| **R-15** 〈rev.3〉 | ⭐ **`ROLE_AUDIT_ADMIN`** | **どのグローバルロール・どの人間ユーザーにも割り当てない。**付与先は R-14（画像配信 / 監査書込マイクロサービス）のみ | — （**投入しないことが設定**） | **CI で検査**（§13.7 AS-13） |
+| **R-16** 〈rev.3〉 | ⭐ **Inventory ロールの `scope: AUDIT`** | **どの Inventory ロールにも含めない。** `inventoryRolePermission.scope` の enum に `AUDIT` が実在するため（§11.2） | — （**投入しないことが設定**） | **CI で検査**（§13.7 AS-13） |
+| **R-17** 〈rev.4〉 | グローバルロール「監査担当」 | §11.2（`ROLE_AUDIT_READ` のみ。`ROLE_AUDIT_ADMIN` は含めない） | `c8y usergroups create` → `c8y userroles addRoleToGroup` | **C: 存在チェック** |
 | **A-05a** | パスワードポリシー | ⚠️ **`Password validity limit` は**テナント全体**の設定で、アカウント単位に指定できません**（*"use '0' for unlimited validity of passwords (default value)"*）。§11.5 統制 3 の「管理者アカウントの有効期限は無期限」は**実装不能**なので、テナント方針として決め直すこと（**[要 CU-14]**） | `c8y tenantoptions updateBulk`（`password` カテゴリ） | 上書き |
 | **A-05b** | TFA | ⚠️ **`password` テナントオプションでは設定できません。** `PUT /tenant/tenants/{tenantId}/tfa` ／ **`c8y tenants tfa update --strategy TOTP`** を使うこと。⚠️ **TOTP は OAI-Secure ログインモード限定**（§11.6 ガード 2b） | `c8y tenants tfa update` | 上書き |
 
@@ -2954,8 +3558,9 @@ devices:
 | ID | 設定項目 | **[判] 設定値** | 設定手段 | 冪等 |
 |---|---|---|---|---|
 | **X-01** | リテンションルール | `EVENT` / `MEASUREMENT` / `ALARM` / `OPERATION` = **90 日**、**`AUDIT` = [要決定]** | `c8y retentionrules create` | ⚠️ **D: 宣言的な集合適用（新規作成 → 旧削除の順）** |
-| **X-02** | イベント添付バイナリ | **[要 SV-06]** リテンションが及ぶか未確認 | — | — |
+| **X-02** | イベント添付バイナリ | **及ぶ [確K]**（§7.4）。⚠️ **CT-22③ で実証すること**〈rev.3 で更新 — 「未確認」表記が §7.4 の「解消」と分裂していた〉 | — | — |
 | **X-03** | オフロード | **REST ページング方式（案 B）**。`prev`/`next` で辿る | 外部バッチ（R-11 の資格情報） | — |
+| **X-04** 〈rev.3・**CU-18 決定後に確定**〉 | **画像削除バッチ**（案 (D) 採用時のみ） | **[要決定]**。ファイルリポジトリにはリテンションが効かないため（§7.4）、**保存期間を守る唯一の手段**。実装主体は §15.4 で決定 | 外部バッチ | — |
 
 **投入手順**（§7.2 の反転手順）:
 
@@ -2991,6 +3596,24 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
 > ⚠️ **`--maximumAge` を省略すると 365 日になります**（go-c8y-cli の bodyTemplate 既定）。**全ルールで明示してください。**
 
 > ⚠️ **`AUDIT` の日数が未決のままこの手順を実行しないでください。**
+
+> ⚠️⚠️ **`AUDIT` は CU-18 → CU-5 → 本手順②の順に依存します** 〈rev.3 で追加〉。
+>
+> **CU-18 が「監査レコードを書く」結論（(A)/(A′)/(D)/(B)）なら、個人情報アクセス記録の保存義務期間が `AUDIT` の日数を支配します**（§7.2）。**CU-18 が未決のまま暫定値を入れないでください** — §7.2 のとおり**保持日数の短縮方向は不可逆**で、短く入れて後から延ばしても**消えたデータは戻りません**。
+>
+> **[判] CU-18 未決なら、手順②の `AUDIT` 行だけをスキップし、他の 4 種を先に投入してください。** 既定ルールの削除（手順③）も `AUDIT` 分は保留します。
+
+> ⭐ **`AUDIT` は 2 本立てにできます** 〈rev.3〉。`retentionRule.type` は *"Used by the data types ALARM, **AUDIT**, EVENT and MEASUREMENT"* [確] なので、**画像アクセス記録だけ長期保持**が可能です（§7.2）:
+>
+> ```bash
+> # 画像アクセス記録（監査レコードの type を専用値にしておくこと・§15.3）
+> c8y retentionrules create --session edge --dataType AUDIT --type <画像アクセス用type> --maximumAge <法定値>
+> # その他の監査記録
+> c8y retentionrules create --session edge --dataType AUDIT --maximumAge <障害調査要件>
+> ```
+
+> ⚠️⚠️ **`AUDIT` のルールは `management` テナントから `editable: false` で作成することを検討してください** 〈rev.3〉。
+> `retentionRule.editable` は *"It can be updated only by the **Management tenant**."* [確]。**`edge` テナントの R-01 は Retention rules ADMIN を持つため、そのままだと `maximumAge=1` のルールを足して証跡を狙い撃ちで消せます**（§7.2）。`editable: false` にすればこの経路が塞がります。**投入テナントが変わるので、§13.1 の管理方式（どのセッションで投入するか）に反映してください。**
 
 #### 13.3.7 ルール（S 系）
 
@@ -3049,7 +3672,12 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
 | **K-04** | デバイスプロファイル | 型ごとの「あるべき設定の束」。**[要 SV-17]** | `c8y deviceprofiles create` | 同上 |
 | **K-01〜K-08** | 運用知識基盤の統制 | **§4.10 のガードレール G-1〜G-14** | 運用手順 + R-06 の権限設計 | — |
 
+| **M-04** 〈rev.3〉 | ⚠️ **ファイルリポジトリの `type` 名前空間規約** | **[要決定]**（CU-18 で案 (D) を採る場合は必須）。ファイルリポジトリには **AI モデル・設定スナップショット・（(D) なら）画像**が混在する。**識別子が無いと CK-8(a) と X-04 削除バッチが実装できない**。例: AI モデル `x_AiModel` / 画像原本 `x_Snapshot` / サムネイル `x_SnapshotThumb` | 規約 + バリデータ | — |
+
 > ⚠️ **`files` リポジトリにはリテンションが適用されません** [確]。ソフトウェアリポジトリは MongoDB 格納のため、**保持世代数と削除運用を決めないと肥大化します**（M-03）。
+
+> ⚠️⚠️ **CU-18 で案 (D) を採ると、個人情報を含む画像が AI モデルと同じリポジトリに同居します** 〈rev.3 で追加〉。
+> **`type` による分離は権限境界ではありません** — `ROLE_INVENTORY_ADMIN` を持つ **R-10（保守）と R-06b** は、画像も読み・差し替え・削除できます（§11.4）。**M-04 の規約は「実装のための識別子」であって、統制ではないこと**を取り違えないでください。統制は CK-8(b) / AS-14(b) のロール検査側です。
 
 #### 13.3.10 アプリケーション（P 系）
 
@@ -3086,7 +3714,7 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
 | **C-4** | **ローカル MQTT 受け口の IF 契約** | §6.3 / §6.5 / §6.6 | `config/platform/local-mqtt-if-spec.md` |
 | **C-5** | **エンティティ登録規約**（`@id` 統制） | §2.6 | 同上 |
 | **V-1** | **ペイロードバリデータ**（C-1 の機械検査） | §6.5 | `scripts/validate-payload.*` |
-| **V-2** | **インベントリ検査**（CK-1〜CK-6） | §2.8 | `scripts/assert-inventory.*` |
+| **V-2** | **インベントリ検査**（CK-1〜CK-8） | §2.8 | `scripts/assert-inventory.*` |
 
 ### 13.4 投入順序と依存関係
 
@@ -3143,6 +3771,9 @@ c8y retentionrules create --session edge --dataType AUDIT       --maximumAge <�
 | **前提 3 → ⑤** | NG なら登録方式そのものが変わる |
 | **⑧ の切替前ゲート → A-04** | ゲート未合格で切り替えると全ユーザーがログイン不可になり得る |
 | **AUDIT 日数 → ⑦** | 既定ルールを消すと再作成すべき値が必要 |
+| ⭐ **CU-18 →（法務）→ CU-5 → ⑦** 〈rev.3〉 | **CU-18 が「監査レコードを書く」結論なら、個人情報アクセス記録の保存義務期間が `AUDIT` の日数を支配します**（§7.2）。**保持日数の短縮方向は不可逆**なので、CU-18 未決のまま暫定値を投入すると事故になります。→ **CU-18 未決なら ⑦ の `AUDIT` 行だけをスキップ**（§13.3.6） |
+| **CT-5c → CU-23 → CU-18** 〈rev.3〉 | ⚠️ **CU-18 は「実機不要」ではありません。** (A)/(A′)/(C) は設計判断だけで選べますが、**(D)/(B) の評価には CT-5c（Edge 導入後の検証環境）が要ります**。**(D)/(B) を残すなら CT-5b / CT-5c を §12.4 直後に前倒ししてください**（§14.12 の 1d / 2b） |
+| **CU-18 → R-14 / S-16 / M-04 / X-04 → ③⑬** 〈rev.3〉 | 決定するまで**画像配信マイクロサービス（R-14）・ファイルリポジトリの `type` 規約（M-04）・画像削除バッチ（X-04）**が起票できません。→ **§15.5 の「CU-18 決定後にやること」** |
 
 ### 13.5 冪等化パターンの割り当て
 
@@ -3233,7 +3864,7 @@ config/
     sites/                                  # ★拠点定義（§13.3.3）
       site001.yaml  site002.yaml …
     notification-subscriptions.json         # N-01（拠点ごとに生成）
-    users.json                              # R-05, R-06, R-11, R-12
+    users.json                              # R-05, R-06, R-08, R-09, R-11, R-12（＋CU-18 決定後に R-14）
     deviceprofiles/*.json                   # K-04
   mgmt/                              # management テナント管轄
     branding/
@@ -3242,7 +3873,7 @@ secrets/                             # 値は入れない。キー名の一覧�
 scripts/
   export.sh   import.sh
   assert-config.sh                   # §13.7 往復差分
-  assert-inventory.sh                # ★CK-1〜CK-6（§2.8）
+  assert-inventory.sh                # ★CK-1〜CK-8（§2.8）
   validate-payload.sh                # ★C-1 のバリデータ
 ```
 
@@ -3264,10 +3895,14 @@ scripts/
 | **AS-8** | main device の拠点グループ所属 | 未所属が 0 件 | CK-4。CI |
 | **AS-9** | external ID プレフィックスと実所属拠点の一致 | 不一致が 0 件 | CK-5。**日次** |
 | **AS-10** | child device のフラグメント検査 | `c8y_SupportedOperations` と `com_cumulocity_model_Agent` が付いていない | CI |
-| **AS-11** | リテンションルールの存在 | 5 種すべてが存在すること。⚠️ **「既定 60 日ルールが残っていない」の検査は [要 SV-43] の結果が出るまで保留**（そのようなオブジェクトが存在しない可能性がある・§7.2） | CI |
-| **AS-12** | サブスクリプション定義 | 拠点数ぶん存在し、`fragmentsToCopy` が指定されている | CI |
+| **AS-11** | リテンションルールの存在 | **6 種**（`ALARM` / `AUDIT` / `BULK_OPERATION` / `EVENT` / `MEASUREMENT` / `OPERATION`）のうち設計した種別が存在すること〈rev.3 で修正 — `dataType` の enum は 6 種 + `*` で、「5 種」は `BULK_OPERATION` が欠落していた〉。⚠️ **「既定 60 日ルールが残っていない」の検査は [要 SV-43] の結果が出るまで保留**（§7.2） | CI |
+| **AS-11b** 〈rev.3〉 | ⭐ **`AUDIT` リテンションの値検査** | **`dataType=AUDIT` のルールが設計どおりの本数だけ存在し、`maximumAge` が CU-5 で決めた値以上であること。想定外の `type` / `source` 絞り込みルールが増えていないこと。**（可能なら `editable: false` であること） | CI。⚠️ **証跡を狙い撃ちで消す経路への唯一の歯止め**（§7.2） |
+| **AS-12** 〈rev.3 で強化〉 | サブスクリプション定義 | 拠点数ぶん存在し、`fragmentsToCopy` が指定されている。⭐ **かつ、その中身に `c8y_IsBinary` / `x_SnapshotRef` / 個人情報を含むフラグメントが含まれないこと**（**否定リスト検査**） | CI |
+| **AS-13** 〈rev.3・レビューで拡張〉 | ⭐ **監査ロールの付与先検査** | **(a)** `ROLE_AUDIT_ADMIN` が**人間ユーザーおよび人間向けグローバルロール（R-01〜R-03 / R-10）のいずれにも付いていない**。付与先は R-14 のみ（R-15）<br>**(b)** ⭐ **全 Inventory ロール（`GET /user/inventoryroles`）の `permissions` に `scope: AUDIT` が含まれないこと**（R-16。§11.2）<br>**(c)** `ROLE_AUDIT_READ` の付与先が R-01 と監査担当のみであること | CI |
+| **AS-14** 〈rev.3・レビューで対象拡大〉 ⚠️ **CU-18 で案 (D) を採る場合のみ** | ⭐ **スナップショットのバイナリ MO の隔離検査** | **(a)** 画像用 `type`（M-04）のバイナリ MO が**どの拠点グループの `childAssets` にも入っていない**<br>**(b)** ⚠️ **グローバルの `ROLE_BINARY_READ` / `ROLE_BINARY_ADMIN` / `ROLE_INVENTORY_READ` / `ROLE_INVENTORY_ADMIN` を持つ主体が R-14 と（実体確認後の）R-01 だけであること。** 検査対象は **R-01 / R-02 / R-03 / R-05 / R-06a / R-06b / R-08 / R-10 / R-11 / R-12**（§15.3 案 (D)） | CK-8。CI |
+| **AS-15** 〈rev.3〉 ⚠️ **CU-18 決定後** | **画像配信マイクロサービス（R-14）の同一性検査** | **デプロイされているアプリケーションのバイナリ ID / バージョンが Git 定義と一致すること。** ⚠️ **R-01 は Application management ADMIN を持つため、マイクロサービスを差し替えられる主体は実質 `ROLE_AUDIT_ADMIN` を持つのと同じ**です。AS-13 だけではこの経路を塞げません | CI |
 
-> ⚠️ **AS-3 / AS-4 / AS-5 は「壊れても長期間気づけない」種類の破綻です。CI に載せることが唯一の歯止めです。**
+> ⚠️ **AS-3 / AS-4 / AS-5 / AS-11b / AS-13 / AS-14 / AS-15 は「壊れても長期間気づけない」種類の破綻です。CI に載せることが唯一の歯止めです。**
 
 ---
 
@@ -3292,6 +3927,9 @@ scripts/
 | **CT-3** | `vmsCameraId` の設定 | **全カメラに設定されている**（未設定 0 件・CK-3） |
 | **CT-4** | ⭐⭐ **「配下をどこまで辿るか」の一括検証**（前提 2 / SV-35 ＋ 前提 7 / SV-47） | **1 つの階層構成で通知と Inventory ロールを同時に検証する。**<br>**構成**: 拠点グループ G の `childAssets` にサブグループ G1 → G1 の `childAssets` にデバイス D → **D の `childDevices` にカメラ C**<br>**(a) 通知**: `{context:"mo", source:{id:G}, apis:["alarmsWithChildren"]}` で購読し、**D のアラームと C のアラームのどちらが届くか**<br>**(b) Inventory ロール**: G に Inventory ロールを割り当てた拠点 Manager が、**D と C のアラーム・インベントリを REST で取得できるか**<br>**判定**: D のみ → `childAssets` 限定。C も → `childDevices` も辿る<br>**NG の場合**: (a) は §1.6 の代替案 (i) へ。(b) は §1.3 の階層設計変更（カメラも `childAssets` で拠点グループに直付け）へ |
 | **CT-5** | ⭐ **Inventory ロールの否定テスト** | 拠点 A のユーザー資格情報で拠点 B のデータを **API 直叩き**して 403/404 |
+| **CT-5b** 〈rev.3〉 | ⭐ **添付画像の直叩き確認**（**肯定テスト**・§6.8 制約 6） | **拠点 Reader（R-04b・Events READ のみ）の資格情報で `GET /event/events/{id}/binaries` を直叩きし、スナップショット画像が 200 で取得できてしまうことを確認する。**<br>⚠️ **「取得できないこと」を期待する試験ではありません。** OpenAPI からは「取得できる」と読めますが、**これが実機で確認できると CU-18 の判断根拠が確定します**（＝ UI 側の対策だけでは監査証跡にならないことの実証）。<br>**併せて、UI から画像を表示・ダウンロードした直後に `GET /audit/auditRecords` を引き、対応する監査レコードが 1 件も増えていないことを確認する**（制約 5 の実証） |
+| **CT-5c** 〈rev.3〉 | ⭐ **`/inventory/binaries` の否定テスト**（案 (D) の成立条件・CU-23 / CU-24） | **サービスユーザーで `POST /inventory/binaries` に画像を上げ、拠点グループ配下に置かない。**<br>**(a)** 拠点 Reader（R-04b）の資格情報で **`GET /inventory/binaries/{id}` が 403 になること**<br>**(b)** 同じ資格情報で **`GET /inventory/binaries`（メタデータ検索）に当該バイナリが列挙されないこと**<br>**(c)** `ROLE_BINARY_READ` を持つサービスユーザーでは **200 で取得できること**<br>⚠️ **(a) が 200 を返すなら案 (D) は成立しません。** CU-18 の選択肢が 1 つ減るので、**CT-5b と同時に W1 で実施してください**<br>**(d)** 〈rev.3 レビューで追加〉**拠点 Reader の資格情報で `GET /audit/auditRecords`（コレクション）が 403 になること。** ⚠️ **この操作だけ OpenAPI に Required roles の記載がありません**（`GET /audit` と `/audit/auditRecords/{id}` には明記あり）。**監査ログ全件＝「誰がいつ誰の顔を見たか」の集合体**なので、ここが開いていると (D) の効果より重い問題になります（CU-26） |
+| **CT-5d** 〈rev.3〉 | ⭐⭐ **画像配信マイクロサービス（R-14）の認可の否定テスト**（§11.11） | **拠点 A のユーザーの OIDC トークンで、拠点 B のカメラに紐づく `binaryId` を R-14 に要求 → 403 になること。**<br>⚠️ **これが通ってしまうと、(D) は「直叩きは 403、正規経路は全開」になります。** CT-5c が合格しても本テストが不合格なら**拠点分離は成立していません**。<br>**併せて (b)** イベントが消えた（＝ 90 日経過した）バイナリに対して **fail-close（403）になること**（§11.11 MS-c / MS-d の孤児バイナリ対策）<br>**(c)** リクエストで `user` を偽装しても、**監査レコードの `user` が OIDC トークン由来の値になること**（MS-e） |
 | **CT-6** | ⭐ **`ROLE_NOTIFICATION_2_ADMIN` の機械検査** | **R-09 以外のどのユーザー・ロールにも付いていない**（CK-6・**CI に載せる**） |
 
 ### 14.3 通知
@@ -3383,6 +4021,8 @@ scripts/
 | **2** | **CT-32b / 証明書の EST 可否**（前提 3） | §3.3 の登録方式が変わり、§3.6 の自動更新を別途設計 |
 | **1b** 〈rev.2〉 | **SV-43**（リテンション既定 60 日の正体） | **90 日ルールを入れても 60 日で消える可能性。§7.2 のデータ保持設計が崩れる** |
 | **1c** 〈rev.2〉 | **SV-45**（Apama-ctrl バリアント） | **§8 の RL-b・RU-2〜RU-5 が全て EPL 前提。§8 の過半が成立しない** |
+| **1d** 〈rev.3〉 | **前提 9 / CU-18**（画像の置き場所と監査方式） | **§6.8 の初期版設計・§11.3 のロール割当・§13 の投入対象・構成図が同時に変わる。** ⚠️ **CU-5（`AUDIT` 日数）が決まらず §13.4 ⑦ が止まる**。**保持日数の短縮は不可逆**なので暫定値で進めてはいけない |
+| **2b** 〈rev.3〉 | **CT-5b + CT-5c + CT-5d**（§14.2） | **CT-5c(a) が 200 なら案 (D) が消え、CU-18 は (A)/(A′)/(B)/(C) に絞られる。** **CT-5d が 403 にならないなら (D)/(B) の「拠点分離できる」が成立しない**（正規経路が全開）。⚠️ **CU-18 は「実機不要」ではありません** — (D)/(B) を残すなら §12.4 直後に前倒しすること |
 | **3** | **CT-8**（通知の到達） | §10 が成立しない。**変-2 と併せて通知経路がゼロ**になる |
 | **4** | **CT-13**（severity の 2 層規則） | §6.4 の型カタログと §9 のマッピングが変わる |
 | **5** | **CT-9 / CT-9b**（child の可用性とアラーム抑止） | 対処方針 2 が効かない場合、§5.4 の対処 3（`c8y.availability.enable false`）または 4（`@health`）へ。**4 を採るとアラーム型規約が変わる** |
@@ -3440,6 +4080,29 @@ scripts/
 | **CU-16** 〈rev.2〉 | 実テナントで**同名グループを 2 件作れる**ことの実測（OpenAPI 仕様からの推論） | §13.3.3 | 中 |
 | **TE-5b** | 既存拠点の `c8y_RequiredAvailability` 一括置換手順 | §5.5 | 中 |
 
+### 15.0b rev.3 での追加 〈個人情報アクセスの監査〉
+
+**「スナップショット画像に人の顔が判別できる形で写る場合、Cumulocity Edge 上での表示・ダウンロードを監査ログとして残せるか」という問いから、事実確認と論点の起票を行いました。** 事実は該当章に反映済みです。**案の選定（CU-18）は未決のまま残しています。**
+
+| 種別 | ID | 内容 | 反映先 |
+|---|---|---|---|
+| **[確]**（事実） | — | **参照・DL は Cumulocity の監査ログに残らない。** 記録対象は変更操作とログイン / ログアウトのみで、`auditRecord.type` は 20 値の固定 enum。**Edge 固有の制限ではない** | **§6.8 制約 5** |
+| **[確]**（事実） | — | **添付の取得権限をイベント閲覧権限から分離できない。** `GET /event/events/{id}/binaries` は `ROLE_EVENT_READ`。**R-04a / R-04b の保有者は REST 直叩きで画像を取得できる** | **§6.8 制約 6 / §11.3** |
+| **[確]**（事実） | — | **`POST /audit/auditRecords` で自前の監査レコードを書ける**（`ROLE_AUDIT_ADMIN`）。書いた後は改竄不能。**Edge は `Microservice Hosting` が `Included`** | **§6.8 / §11.2** |
+| **[判]**（ガードレール） | **AS-13** | **`ROLE_AUDIT_ADMIN` を人間ユーザーに付けない**（付けると証跡を捏造できる）。`ROLE_AUDIT_READ` も R-01 と監査担当のみ | **§11.2 / §13.7** |
+| **[判]**（ガードレール） | **CK-8 / AS-14** | ⚠️ **CU-18 で案 (D) を採る場合のみ有効。** **(a)** バイナリ MO をどの拠点グループにも入れない **(b)** `ROLE_BINARY_READ` / `ROLE_INVENTORY_READ` を拠点ロールに付けない。**どちらか一方でも崩れると 403 が静かに破れる** | **§2.8 / §13.7 / §15.3 案 (D)** |
+| **[確]**（事実）〈追記〉 | — | ⭐ **制約 6 はイベント添付に固有。** `GET /inventory/binaries/{id}` は `ROLE_INVENTORY_READ` / `ROLE_BINARY_READ` / **owner** / **`MANAGE_OBJECT_READ` on the resource** の 4 択で、**判定対象がバイナリ MO 自身に変わる**ため、**格納先を移すだけで権限分離できる**（＝案 (D)）。**「1 イベント 1 バイナリ」も外れる** | **§6.8 / §15.3 案 (D)** |
+| **[確]**（事実）〈追記〉 | — | ⚠️ **`POST /audit/auditRecords` は「任意のログ API」ではない。** `type` は固定 enum、`source.id` 必須、`severity` は `readOnly`、書き込みに `ROLE_AUDIT_ADMIN`。⭐ **ただし `PUT` / `DELETE` が存在せず、個別レコードの改竄・削除は API から不可能** | **§15.3** |
+| **[要決定]** | **CU-18** | **画像の置き場所と監査方式**（A / A′ / **D** / B / C の 5 案）。**§6.8 の「将来: オブジェクトストレージへ移行」を初期版から必須にするか、あるいは `/inventory/binaries` に移すか** | **§15.3 / 前提 9** |
+| **[要決定]**（入力追加） | **CU-5** | `AUDIT` の日数に **③個人情報アクセス記録の保存義務期間**を入力として追加。決定主体に**法務**を追加 | **§7.2 / §15.2** |
+| **[要確認]** | **CU-19〜CU-22** | `ROLE_AUDIT_ADMIN` の付与可否 / `user` フィールドの設定可否 / UI のプレビュー有無 / `AUDIT` の `fragmentType` 絞り込み | **§15.3** |
+| **[要確認]** | **CU-23〜CU-25** | ⭐ **`/inventory/binaries/{id}` で拠点ユーザーが 403 になるか**（案 (D) の成立条件）/ メタデータ検索で何が見えるか / `source.id` の実在検証 | **§15.3** |
+| **[要確認]** | **CU-26〜CU-32** 〈レビューで追加〉 | `GET /audit/auditRecords` の必要ロール / ⭐ **R-01「Tenant Manager 相当」の実体** / 監査レコードの `type` 値 / **S-15（Edge root）の統制** / **バックアップの暗号化・破棄** / `AUDIT` リテンションの時刻基準 / **映像クリップのアクセス監査** | **§15.3** |
+| **[判]**（必須要件） | **§11.11**（新設） | ⭐ **画像配信マイクロサービス（R-14）の認可仕様。** ここを落とすと (A)/(A′)/(D)/(B) いずれも「直叩きは塞いだが正規経路は全開」になる | **§11.11 / CT-5d** |
+| **[検証]** | **CT-5b / CT-5c / CT-5d** | 添付の直叩き確認（肯定）／`/inventory/binaries` の否定テスト／⭐ **R-14 の認可の否定テスト** | **§14.2 / §14.12 の 2b** |
+
+> ⚠️ **CU-18 が決まるまで起票を保留しているもの**: §11.4 の **R-14**（監査レコードを書くサービスユーザー）、§13 の投入対象、監査レコードのフィールド規約。**先に CU-18 を決めてください。**
+
 ### 15.1 本書の前提が崩れるもの（最優先）
 
 | # | 項目 | 確認方法 | 影響 | 既存 ID |
@@ -3450,6 +4113,7 @@ scripts/
 | **前提 6** 〈rev.2 で追加〉 | **Edge 同梱の Apama-ctrl バリアントで EPL Apps が使えるか** | §12.4 の導入直後 | **§8 の RL-b・RU-2〜RU-5 が全て EPL 前提。使えないと §8 の過半が成立しない** | **SV-45** |
 | **前提 7** 〈rev.2 で追加〉 | **Inventory ロールが `childDevices`（カメラ・BOX）まで継承されるか** | 検証環境（CT-4・前提 2 と同時） | **拠点 Manager がカメラ個別のアラーム・インベントリを見られず §11.3 が崩れる** | **SV-47** |
 | **前提 8** 〈rev.2 で追加〉 | **リテンションの「既定 60 日」が削除可能なオブジェクトか、システム設定側の値か** | 検証環境（W1 最優先） | **システム設定側なら、90 日ルールを入れても 60 日で消える。§7.2 が崩れる** | **SV-43** |
+| **前提 9** 〈rev.3 で追加〉 | ⭐⭐ **「スナップショットは Cumulocity イベント添付のみ」（構成図の初期版設計）を維持できるか** — 画像が個人情報を含む場合、**参照は監査ログに残らず（§6.8 制約 5）、権限分離もできない（制約 6）**。**監査証跡を要件とするなら、画像の置き場所を決め直す必要がある** | **設計判断**（実機不要）。案件・法務との合意 | **§6.8 の初期版設計・§11.3 のロール割当・§13 の投入対象が変わる。** 構成図側の修正も要る | **CU-18** |
 | **前提 1** | **外部Gateway の配置方式（案 α / β）** | 設計判断 | §1.2 の階層図・§6.2 のデータ経路・§10.2 の購読設計 → **付録 A** | [担当範囲] W0-10 |
 | **前提 5** | **型規約・external ID 規約の関係チームとの合意** | 合意プロセス | §7.2・§8・§9・§10.2 が全部やり直し | [担当範囲] C-1 / C-2 |
 
@@ -3461,7 +4125,7 @@ scripts/
 | **CU-2** | **external ID の仮名化要否** | §2.2 | **クラウドへ出る特徴量に紐づく個人情報上の論点**。仮名化するなら採番形式そのものが変わる | **法務 / 顧客合意** | [担当範囲] C-2 |
 | **CU-3** | **デバイス撤去時の物理削除 / 論理削除** | §3.9 | 物理削除すると過去イベントの `source` が欠損し、オフロード済みデータと突合できなくなる | 基盤 | — |
 | **CU-4** | **`x_BoxParseError` と `x_Alarm_<種別>` のクリア条件** | §9.6 | **クリア条件のないアラームは永久に消えない**（§7.3） | 基盤 × 案件 | — |
-| **CU-5** | **リテンション `AUDIT` の日数** | §7.2 / §13.3.6 | **既定ルールを消すと再作成すべき値が必要**。決まらないとリテンション投入自体ができない | 顧客契約 / 監査要件 | [設定書] K-c / G-13 |
+| **CU-5** 〈rev.3 で入力追加〉 | **リテンション `AUDIT` の日数** | §7.2 / §13.3.6 / **§6.8** | **既定ルールを消すと再作成すべき値が必要**。決まらないとリテンション投入自体ができない。⭐ **rev.3 で入力が 1 つ増えました**: 設定変更の追跡・障害調査要件に加え、**個人情報アクセス記録の保存義務期間**から逆算する（CU-18 が「監査レコードを書く」結論なら、その記録も `AUDIT` に入る）。**3 つ目が支配的になる可能性が高い** | 顧客契約 / 監査要件 / **法務**〈rev.3 で追加〉 | [設定書] K-c / G-13 |
 | **CU-6** | **`x_Detection_<種別>` / `x_Alarm_<種別>` の種別列挙** | §6.3.3 / §9.2 | 型が決まらないと `alarm.type.mapping`・ルール・購読フィルタが投入できない | **案件側** | [担当範囲] C-1 |
 | **CU-7** | **`responseInterval` の実値** | §5.5 | 過大＝検知漏れ、過小＝アラーム氾濫 | 基盤（実測） × 案件（許容誤検知率） | **SV-26** |
 | **CU-8** | **CORS 許可オリジンの完全なリスト** | §11.8 / §13.3.1 | **紐づけ確認アプリを含む**。不足するとアプリが「認証は通るが API が呼べない」 | VM2 の各アプリ担当 | [設定書] T-02 |
@@ -3474,10 +4138,27 @@ scripts/
 
 | # | 項目 | 確認方法 | 優先度 | 既存 ID |
 |---|---|---|---|---|
+| **CU-18** 〈rev.3 で追加〉 | ⭐⭐ **スナップショット画像の置き場所と、個人情報アクセスの監査方式**（下の 5 案） | ⚠️ **「実機不要」ではありません**〈rev.3 レビューで修正〉。**(A)/(A′)/(C) は設計判断のみ。(D)/(B) は CT-5c / CT-5d（Edge 導入後）の結果が要る** → §14.12 の 2b | **最高**。決まらないと §11.4 の R-14・§11.1 の S-16・§13.3.9 の M-04・§13.3.6 の X-04・CU-5 の日数が確定しない（§13.4） | — |
+| **CU-19** 〈rev.3〉 | マイクロサービスの `requiredRoles` に **`ROLE_AUDIT_ADMIN`** を指定してサービスユーザーに付与できるか | manifest に記載してデプロイ → `GET /user/currentUser` の effectiveRoles を確認 | **高**（CU-18 でどの案を採っても前提になる） | — |
+| **CU-20** 〈rev.3〉 | `POST /audit/auditRecords` で **`user` フィールドを任意の値に設定できるか**（サービスユーザー名で上書きされないか） | サービスユーザーで実操作者名を入れて POST → GET で確認。⚠️ OpenAPI 上 `user` は `readOnly` ではない（`application` は `readOnly`）ので**設定できるはず** [推] | **高**。**できないと「誰が見たか」が残せず、証跡の意味がなくなる** | — |
+| **CU-21** 〈rev.3〉 | 標準 Device Management UI が**イベント添付画像をインラインでプレビューするか、ダウンロードリンクのみか** | Edge 導入後に実機で確認（CT-5b と同時） | 中。**「見た」の定義（表示 / DL）と、UI 側の実装点が変わる** | — |
+| ~~**CU-22**~~ 〈rev.3 で起票 → **同 rev.3 のレビューで解消**〉 | ~~`AUDIT` リテンションの絞り込み~~ | **実機確認不要でした。** `retentionRule` スキーマに明記: `fragmentType` は *"Used by EVENT, MEASUREMENT, OPERATION and BULK_OPERATION"* ＝ **`AUDIT` 不可**／**`type` は *"Used by ALARM, AUDIT, EVENT and MEASUREMENT"* ＝ `AUDIT` 可**／`source` は全 dataType 可 | ⭐ **「画像アクセス記録だけ長期保持」は `type` で実現できます**（§7.2 / §13.3.6）。**代わりに `type` の選び方が設計判断になりました**（下の CU-28） | — |
+| **CU-23** 〈rev.3〉 | ⭐ **`/inventory/binaries/{id}` で拠点ユーザーが 403 になるか**（案 (D) の成立条件） | 検証環境（**CT-5c**）。R-04b の資格情報で `GET /inventory/binaries/{id}` を直叩き | **最高**（CU-18 で (D) を検討する場合）。**403 にならないなら (D) は成立せず、(A) / (A′) / (B) に絞られる** | — |
+| **CU-24** 〈rev.3・レビューで修正〉 | **`GET /inventory/binaries`（メタデータ検索）で何が見えるか** — **OpenAPI に Required roles の記載が無い操作**。⚠️ **rev.3 初出時は「この操作だけ」と書いたが誤り。252 operation 中 18 件が同様に欠落しており、`GET /inventory/managedObjects` も含まれる** | 検証環境（CT-5c(b) と同時）。R-04b の資格情報で一覧を引き、**401/403 が返るか、少なくとも当該バイナリが列挙されないこと**を確認 | **高**。⚠️ **本体が 403 でも「いつ・どのカメラで何件撮られたか」がメタデータから漏れる可能性**がある。**列挙できるなら (D) は「本体は 403 だがメタデータは全開」になる**ので CU-23 と同格の成立条件 | — |
+| **CU-26** 〈rev.3 レビュー〉 | ⭐ **`GET /audit/auditRecords`（コレクション）の必要ロール** — 同じく **OpenAPI に Required roles の記載が無い**（`GET /audit` と `/audit/auditRecords/{id}` には明記あり） | 検証環境（**CT-5c(d)**）。拠点 Reader の資格情報で 403 になることを確認 | **高**。**監査ログ全件 ＝「誰がいつ誰の顔を見たか」の集合体**。ここが開いていると (D) の効果より重い | — |
+| **CU-27** 〈rev.3 レビュー〉 | ⭐ **R-01「Tenant Manager 相当」の実体**（`ROLE_AUDIT_ADMIN` / `ROLE_INVENTORY_READ` / `ROLE_BINARY_READ` を含むか） | `GET /user/roles` で展開（CU-19 と同時） | **最高**。⚠️ **含まれていれば AS-13 は最初から不合格**で、**CU-18 でどの案を採っても R-01 は全拠点の画像を無監査で取得できます**（§11.2） | — |
+| **CU-28** 〈rev.3 レビュー〉 | **監査レコードに使う `auditRecord.type` の値** | 設計判断 | **高**。⚠️ **`Event` を選ぶと、CU-22 で判明した `type` によるリテンション分割ができず、Audit logs 画面でも既存記録に埋もれます。** 20 値の enum のうち**本構成で発生しない値**を選ぶこと | — |
+| **CU-29** 〈rev.3 レビュー〉 | ⚠️⚠️ **S-15（Edge ホスト OS / k3s 管理者）の統制** | 設計判断 + 運用設計 | **高**。**CU-18 でどの案を採っても塞がらない経路**。保持者の限定・分掌・踏み台経由のセッション記録を決めるか、「技術的に監査不能」を法務に明示するか（§11.1） | — |
+| **CU-30** 〈rev.3 レビュー → **rev.4 で推奨案を記載**〉 | ⚠️ **Edge バックアップの暗号化・保管・保持世代・破棄** — **§12.6.6 に [判] 推奨案あり**（保管先での at-rest 暗号化・鍵は admin エスクローと同体系・世代ローテーション破棄・台帳） | **残るのは法務確認のみ**（§12.6.6 の確認リスト ①〜④ — 最悪残存期間 35 日・リストア時の一時復活・削除請求に応じられないこと） | **高**。**バックアップには画像も監査レコードも入ります**（§12.6）。削除バッチで消してもバックアップに残り、リストアで監査レコードが巻き戻ります | — |
+| **CU-31** 〈rev.3 レビュー〉 | **`AUDIT` リテンションの削除判定が `time` と `creationTime` のどちらか** | 検証環境（CT-22 と同時）。過去日付の `time` を持つ監査レコードを投入して観測 | 中。⚠️ **`time` 基準なら、過去日付を書くだけで次回リテンションで消せます**（`time` は writable）＝「`PUT`/`DELETE` が無いから改竄不能」の唯一の抜け穴。`time` 基準なら §11.11 MS-g に「`time` は `creationTime` ± N 分以内」の検証を足す | — |
+| **CU-33** 〈rev.3 → **rev.4 で推奨設計を記載**〉 | ⭐⭐ **バックアップの取得方式・頻度・保持世代・保管先** — **§12.6.2b に [判] 推奨値あり**（①VM 原子スナップショット→エクスポート→即削除・②日次＋イベント駆動 3 点・③日次 7＋週次 4＋upgrade 前 1・④別障害ドメインに 2TB） | **残るのは ①P-0-8（仮想化基盤）の確認 ②CT-36 の実証 ③保管先の現物調達と取得ジョブの実装主体の決定**（§15.4） | **最高**。⚠️ **公式は取得手順を提供していません**（*"implement appropriate data protection measures"* のみ）。**稼働中のファイルコピーは一貫性が無く復元できません** | **SV-29 / TE-10** |
+| **CU-34** 〈rev.3 → **rev.4 で見通し改善**〉 | ⭐ **リストア後にデバイスの再エンロールが要るか**（§12.6.4 RS-1）。**「再エンロール不要で再接続できる」見込みが立ちました [推]** — CA の実体はバックアップに含まれ（テナントオプション + trusted certificate [確]）、照合はチェーン検証、**auto-registration が既定 ON** なのでデバイスユーザーは初回 MQTT コールで再作成される [確]。前提: CA 作成が T-Δ より前（→ BK-l）・auto-registration を OFF にしていない | 検証環境（**CT-35(c)**）。T-Δ 以降に登録したデバイスが復元後に接続できるかを実測（**thin-edge のエンティティ再作成挙動も同時に観測**） | **高**。⚠️ **[推] が覆って再エンロールが要るなら「拠点に人を出す」ことになり、RTO が数時間から数日に変わります**（12.6.5 ⑥）。前提 3（SV-08 / EST）の結論に依存 | — |
+| **CU-32** 〈rev.3 レビュー〉 | ⚠️ **映像クリップ（D14 / RU-6 / NS-2）のアクセス監査** | 設計判断 | **高**。**アラーム昇格で同じ人物の「動画」が自動的にオブジェクトストレージへ出ています**（§7.5）。CU-18 は静止画に閉じており、**(A)/(A′)/(D) はいずれも「Cumulocity の外へ監査要件を移す」だけ**。移送先の監査を CU-18 と同格で決めること | — |
+| **CU-25** 〈rev.3〉 | `POST /audit/auditRecords` の **`source.id` に実在しない MO ID を渡せるか**（検証されるか） | 検証環境で存在しない ID を POST → 4xx が返るか | 中。**返る場合、削除済みカメラに対する監査レコードが書けなくなる**（§3.9 の物理削除・CU-3 と関係する） | — |
 | **CU-13** | **severity 変更時の 2 層の一意性規則の相互作用** | 検証環境（CT-13） | **高**。型規約の確定前に必要 | — |
 | — | **運用知識基盤の「設定の更新」対象に画像解析装置・カメラを含めるか** | 設計判断（実機不要） | **最高**。含めないなら K-03〜K-05 / R-06 書込側が丸ごと不要になりリスクが激減 | **SV-17** |
 | — | **カメラ（child device）への構成オペレーションが成立するか** | 検証環境 | 中。⚠️ **§4.3（child に何も申告しない）と両立しない**（§4.5） | **SV-28** |
-| — | イベント添付バイナリがリテンションの対象か | 検証環境（CT-22） | 高 | **SV-06** |
+| — | イベント添付バイナリがリテンションの対象か → **及ぶ [確K]。残るのは CT-22③ での実証のみ**〈rev.3 で表記統一 — §7.4 の「解消」と本欄の「未確認」が分裂していた〉 | 検証環境（CT-22③） | 中 | **SV-06** |
 | — | 一括登録 CSV で `ENROLLMENT_OTP` と `PATH` を併用できるか | 検証環境 | 高 | **SV-07** |
 | — | `PUT /tenant/options/{category}` のマージ／置換セマンティクス | 検証環境 | **高**。置換なら再実行で設定が壊れる | **SV-30** |
 | — | スマートルールの managed object の `type` / `fragmentType` | 検証環境で GUI 作成 → 観測 | **高**。実値が分からないと投入スクリプトが書けない | **SV-32 / U-01** |
@@ -3488,6 +4169,133 @@ scripts/
 | — | BOXアダプタのマッピング定義を Cumulocity 経由で配るか Ansible か | 設計判断 | 中 | **SV-27 / TB-2** |
 | — | `bulkoperation.creationramp` の意味（既定値か下限か） | ベンダー照会 | 低（G-4 が主統制） | **SV-19** |
 
+#### ⭐ CU-18 の詳細 — 画像の置き場所と監査方式 〈rev.3 で追加〉
+
+**前提となる事実は §6.8 制約 5・6 に記載済みです。** 要点だけ再掲すると、**① 参照・DL は Cumulocity の監査ログに残らない**、**② 添付の取得権限をイベント閲覧権限から分離できない**、の 2 つが同時に効きます。その結果、**UI 側だけの対策は REST 直叩きで迂回され、監査証跡になりません。**
+
+**[要決定] 次の 5 案のどれを採るかを決めてください。本書では判断していません。**
+
+> ⚠️ **(D) の記述量が多いのは、rev.3 で新たに見つかった選択肢で説明が要るからであって、推奨だからではありません** 〈rev.3 レビューで明記〉。**分量を推奨度と読まないでください。** 実際、レビューの結果 **(D) は「リテンションが効かない」「削除バッチが AX-7 に抵触」「AI モデルと同居」「孤児バイナリ」といった固有コストを多く抱えており、(B) には (D) に無い利点（リテンションが効く）があります。**
+
+> ⚠️⚠️ **比較の前提 — 下表の「迂回可能性」は `Cumulocity 内での` 迂回に限った評価です** 〈rev.3 レビューで明記〉。**どの案を採っても塞がらない経路が 3 つあります**:
+>
+> - **S-15（Edge ホスト root / k3s 管理者）** — MongoDB 直読・Secret 取得・データ持ち出し（§11.1 / CU-29）
+> - **Edge バックアップ** — 画像も監査レコードも含む。削除しても残り、リストアで巻き戻る（§12.6 / CU-30）
+> - **映像クリップ** — アラーム昇格で同じ人物の動画が自動的に Cumulocity の外へ出ている（D14 / RU-6 / CU-32）
+>
+> **また、R-01（基盤運用者）については CU-27 の実体確認が済むまで、どの案でも「無監査で全画像取得可能」の可能性が残ります。**
+
+| 案 | 内容 | Cumulocity 内での迂回可能性 | 実装コスト | 主なトレードオフ |
+|---|---|---|---|---|
+| **(A) Cumulocity に置かない** | 原本・サムネイルともオブジェクトストレージへ。Cumulocity のイベントには**参照キーのみ**（例 `x_SnapshotRef`）。閲覧は自作アプリ経由で、そこでアクセス記録を残す | **なし**（Cumulocity 側に画像が存在しない） | 中 | **§6.8 の「将来」が初期版に前倒しになる。構成図側の修正が要る。**<br>⚠️ **監査要件が移送先に丸ごと移りますが、本書に移送先の監査設計はありません**（CU-32）。⚠️ **移送先は §7.5 のオフロード先・クリップ保存先と同じバケットになる公算が高く、R-11 の資格情報で画像も読める設計になりやすい。**<br>⚠️ **「個人情報が存在しない」は言い過ぎです** — カメラ名・設置場所・検知時刻・検知種別は Cumulocity に残ります |
+| **(A′) マスク済みサムネイルのみ Cumulocity** | (A) に加え、**顔をマスクした**サムネイルだけをイベント添付として残す | **なし**（マスクが正しく効いている限り） | 中 | **Cumulocity 上で一次確認できる運用性を残せる。**<br>⚠️ **マスク処理の責務が [担当範囲] 外＝品質保証の主体が居ません。顔検出漏れ＝素の個人情報がそのまま入ります。**<br>⚠️ **「個人情報でなくなる」は法務判断であって設計判断ではありません**（服装・体型・場所・時刻 + カメラ ID で特定可能な場合がある）。<br>⚠️ 制約 2 が残るので**原本ハッシュを併置できません** |
+| ⭐ **(D) `/inventory/binaries` に格納**〈rev.3 で追加〉 | イベント添付をやめ、**ファイルリポジトリ**（`POST /inventory/binaries`）に格納。イベントには参照 ID のみ（`x_SnapshotRef`）。閲覧は `ROLE_BINARY_READ` を持つ R-14 経由で、そこで `POST /audit/auditRecords` | **直叩きは 403 にできる**（下の「(D) の根拠」）。⚠️⚠️ **ただし正規経路（R-14）に拠点分離を自前で実装しないと全開になります**（§11.11 / CT-5d） | 中 | ⚠️⚠️ **リテンションが効きません** [確]。**削除バッチ（X-04）が保存期間を守る唯一の手段**になり、その監視まで要る（§7.4 / §12.7 ⑪）。⚠️ **削除バッチは「拠点横断の書込権限を常時保持するアカウント」になり §11.7 AX-7 に抵触**（回避策: アップロード主体と同じサービスユーザーで削除する＝ `owner` 条項。ただし**その主体は常に全画像を読める**）<br>⚠️ **バイナリ 1 件＝ MO 1 件**で §7.7 SV-14b に直撃。**MO 作成/削除の監査レコードも増える**（CU-10 の入力）<br>⚠️ **AI モデルと同じリポジトリに同居**し、`ROLE_INVENTORY_ADMIN` を持つ R-10 / R-06b が読み・書き換え・削除できる（§11.4）<br>⚠️ **イベントが 90 日で消えるとバイナリが孤児になる**（§11.11 MS-c） |
+| **(B) 暗号化して添付＋復号マイクロサービスで監査** | 画像を暗号化して `POST /event/events/{id}/binaries`。**鍵は Edge 上のマイクロサービスのみが保持**し、復号時に `POST /audit/auditRecords` | ⚠️ **暗号文の取得自体は無監査で誰でもできます**（`Events READ`）。平文化は防げる | **大** | ⭐ **利点**〈rev.3 レビューで追記〉: **イベント添付なのでリテンションが効きます**（§7.4）。**(D) の最大の欠点（削除バッチが唯一の保存期間統制）が (B) にはありません**<br>⚠️ **標準 UI では画像が表示できない**（専用ウィジェット必須）。⚠️ **harvest-now-decrypt-later** — 鍵が将来漏れると過去分が全滅。⚠️ 鍵は k8s Secret ＝ **Edge root で読める**。⚠️ 鍵ローテーションで旧画像が復号不能。⚠️ 制約 2 が残るのでサムネイル不可。⚠️ **復号サービスも (D) と同じ confused deputy**（§11.11） |
+| **(C) 監査を諦め、アクセスできる人を極小化** | §11.3 の `Events READ` 保有者を最小人数に絞り、「画像を見られる人 ＝ 事前審査済みの少人数」という**別の統制**に置き換える | — | 小 | **監査要件を満たさない可能性がある。** 採るなら**法務の明示的な承認**が要る。<br>⚠️ **「少人数」の分母を数え違えないこと** — `Events READ` を減らしても **R-01 / R-06a / R-06b / R-08 / R-10 / R-11 / break-glass / S-15（Edge root）は全員残ります。**<br>⚠️ 制約 6 により**画像だけを外すことはできません**。R-04b から `Events READ` を外すと、**業務閲覧者は Cockpit で検知イベントを何も見られなくなります**（「運用が変わる」より重い） |
+
+##### ⭐ (D) の根拠 — なぜ `/inventory/binaries` だと権限分離できるのか 〈rev.3 で追加〉
+
+**`/event/events/{id}/binaries` と `/inventory/binaries/{id}` では、必要ロールの構造が違います** [確]（Core OpenAPI）:
+
+| API | Required roles | 拠点オペレーター / 閲覧者（R-02 / R-03 + R-04a / R-04b）はどうなるか |
+|---|---|---|
+| `GET /event/events/{id}/binaries` | `ROLE_EVENT_READ` **OR** `EVENT_READ` permission **on the source** | ⚠️ **取得できる。** source ＝ 対象カメラは担当拠点グループ配下にあり、Inventory ロールで `EVENT_READ` が届くため（§6.8 制約 6） |
+| `GET /inventory/binaries/{id}` | `ROLE_INVENTORY_READ` **OR** `ROLE_BINARY_READ` **OR** **owner of the resource** **OR** `MANAGE_OBJECT_READ` permission **on the resource** | ⭐ **4 つのどれも満たしません**（下記）→ **403 が期待できる** |
+
+- **`ROLE_INVENTORY_READ` / `ROLE_BINARY_READ`（グローバル）**: §11.2 rev.2 の原則により、**顧客ユーザーには付与しません**（付与してよいのは Own user management READ とアプリアクセスのみ）
+- **owner of the resource**: アップロードするのは画像解析パイプライン側のサービスユーザー／デバイスであり、**閲覧者は owner になりません**
+- **`MANAGE_OBJECT_READ` on the resource**: 判定対象が**イベントの source（カメラ）ではなくバイナリ MO 自身**に変わります。**バイナリ MO を拠点グループ配下に置かなければ、Inventory ロールは到達しません**
+
+> ⭐ **これが (D) の核心です。** 制約 6（権限分離不能）は **`/event/events/{id}/binaries` に固有の性質**であって、Cumulocity 全体の性質ではありません。**格納先を変えるだけで、独自暗号なしに「イベントは見えるが画像は 403」を作れます。**
+>
+> ⚠️ **ただし「403 になること」は仕様からの推論です。実機で確認してください** → **CT-5c** / **CU-23**。
+
+> ⚠️⚠️ **(D) の 403 は「置き方」に依存するので、CI で守り続ける必要があります** 〈rev.3 で追加〉。
+>
+> 上の 4 つの選択肢は、**運用の途中で 1 つでも満たされると静かに穴が開きます**:
+>
+> - 誰かがバイナリ MO を **`childAssets` で拠点グループにぶら下げた** → `MANAGE_OBJECT_READ` が届いて 200 になる
+> - 誰かが R-02 / R-03 に **グローバルの `ROLE_INVENTORY_READ` / `ROLE_BINARY_READ` を足した** → 全バイナリが見える
+>
+> **これは §11.2 で潰したはずの「グローバルにデータ系ロールを持つと Inventory ロールの絞り込みが効かなくなる」問題と同型です。** 初回の設定が正しくても、**次に権限を足した人が壊します。**
+>
+> **→ §2.8 CK-8 / §13.7 AS-14 として機械検査を起票しました**（(D) 採用時のみ有効）。**AS-3 / AS-4 / AS-5 / AS-13 と同じく「CI が唯一の歯止め」の種類です。**
+>
+> ⚠️ **検査対象は拠点側ロールではありません**〈rev.3 レビューで修正〉。`POST .../childAssets` は **source と child の両方**に権限を要求するため（§2.8 の注記）、**拠点 Manager は自力でバイナリをぶら下げられません。** 実際に危ないのは **グローバルにデータ系ロールを持つ主体** — **R-01 / R-05 / R-06a / R-06b / R-08 / R-10 / R-11** です（§11.4）。
+
+> ⚠️⚠️ **(D) の 403 は「直叩き」にしか効きません** 〈rev.3 レビューで追加〉。
+> 正規の閲覧経路である **R-14（画像配信マイクロサービス）には Cumulocity の拠点分離が一切効きません。** R-14 が自前で認可判定をしなければ、**拠点 A のユーザーが拠点 B の `binaryId` を投げれば 200** です。**§11.11 が (D)/(B) 採用時の必須要件**、**CT-5d がその合格判定**です。
+
+> ⚠️ **`owner` 条項の非対称に注意してください** 〈rev.3 レビューで追加〉。
+> `GET` / `PUT` / `DELETE /inventory/binaries/{id}` はいずれも *"… OR **owner of the resource** OR …"* を含みます [確]。**つまり画像をアップロードした主体（画像解析パイプライン側のサービスユーザー）は、全画像を常に読める・書き換えられる・消せます。**
+>
+> - **利点**: 削除バッチ（X-04）を**この主体で動かせば、グローバル書込ロール無しで削除できます** → §11.7 **AX-7**（拠点横断の書込権限を常時保持するアカウントを作らない）への抵触を回避できます
+> - **代償**: **その主体は常に全画像を読めます** → **AS-14(b) の検査対象に含めてください**
+
+> ⚠️⚠️ **(D) を採っても制約 5（参照・DL は監査ログに残らない）は解消しません。** **格納先を変えても、監査レコードを自前で書く必要性は消えません。** (D) が解消するのは制約 6 だけです。
+
+**(D) の副次的な効果**:
+
+| 効果 | 内容 |
+|---|---|
+| ⭐ **制約 2 が外れる** | **「1 イベント 1 バイナリ」（2 件目は 409）はイベント添付の制約**です。ファイルリポジトリなら**原本とサムネイルの 2 本を同じイベントに紐づけられます**（イベント側に `x_SnapshotRef: { fullId, thumbId }` を持たせる） |
+| ⭐ **網断耐性が 1 段上がる** | イベント ID に依存しないため、**「先にバイナリを上げて ID を得る → イベントを MQTT で送る」**という順序が取れます（§6.8 の SV-42 の設計が単純化されます） |
+| **最小権限にできる** | 画像配信マイクロサービスには **`ROLE_BINARY_READ` だけ**を与えられます（`ROLE_INVENTORY_READ` は不要。専用ロール族が存在する） |
+
+**(D) の追加コスト**:
+
+| コスト | 内容 |
+|---|---|
+| ⚠️⚠️ **削除運用が必須** | リテンションが効かないため、**放置すると無期限に残ります**。⚠️ **これは §4.4 論点 2（AI モデルの世代管理・TE-20）とまったく同じ問題ですが、件数が桁違いです**（検知件数 × 2）。**個人情報の保存期間を守るには削除バッチが唯一の手段**であり、**バッチが止まったことを検知する監視まで含めて設計が要ります** |
+| ⚠️ **MO 総数の増加** | バイナリ 1 件 ＝ managed object 1 件。§7.7 のスケール制約（**SV-14b**: MO 総数・課金・クエリ性能）に直撃します。**CU-10 の容量サイジングに「検知レート × 2」の MO 増を入力として追加してください** |
+| **ファイルリポジトリが AI モデルと混在** | Administration の Files repository に AI モデルと画像が並びます。**`type` で分離する規約**が要ります（`ROLE_INVENTORY_READ` を持つ R-01 基盤運用者には一覧で見えます） |
+| **サイズ上限が別系統** | イベント添付の既定 50MiB とは別に、`files/max.size` が効きます（実値は **SV-13 / TE-16** で未確認） |
+
+> ⚠️ **(A) / (A′) / (D) / (B) のいずれも、`POST /audit/auditRecords` を書くサービスユーザー（**R-14** / **S-16**）が必要です。** 枠は §11.1 / §11.4 に予約済みで、**中身は CU-18 決定後に確定**します（§15.5）。
+>
+> ⚠️⚠️ **そしていずれの案でも、その配信主体は特権を持ち、拠点分離を自前で再現する必要があります** → **§11.11 が必須要件です。** ここを落とすと、どの案も「直叩きは塞いだが正規経路は全開」になります。
+
+##### `POST /audit/auditRecords` で何が書けるか — 「任意のログ API」ではありません 〈rev.3 で追加〉
+
+**⚠️ 汎用ログ API と誤解しないでください。「半分だけ任意」です** [確]（Core OpenAPI `auditRecord` スキーマ）。
+
+| | フィールド | 可否 |
+|---|---|---|
+| **自由に書ける** | `activity`（実施した操作の要約）・`text`（詳細）・`user`（実施者）・`time` | ✅ いずれも自由文字列 |
+| **自由に書ける** | **任意の追加フラグメント** | ✅ *"It is possible to add an arbitrary number of additional properties as a list of key-value pairs"*。**独自フラグメント（例 `x_ImageAccess`）で構造化データを載せられます** |
+| ⚠️ **書けない** | **`type`** | ❌ **20 値の固定 enum**。**独自 type は作れません** → `Event` 等を流用するしかない |
+| ⚠️ **必須** | `activity` / `source` / `text` / `time` / `type` の **5 つが required** | ⚠️ **`source.id` が必須**。*"The platform component ID to which the audit is associated"* ＝ **紐づけ先の ID が無いログは書けません**（→ **CU-25**） |
+| ⚠️ **書けない** | `application` / `severity` / `changes` / `creationTime` / `id` / `self` | ❌ すべて `readOnly`。**`severity` を自分で指定することはできません** |
+
+⭐ **証跡として強い性質** [確]: **Audit API には `PUT` も `DELETE` も存在しません。** OpenAPI に定義されているのは `GET /audit` / **`POST` + `GET` /audit/auditRecords** / `GET /audit/auditRecords/{id}` の 4 つだけです（spec 全 149 パスを走査して確認）。**個別レコードの改竄も削除も REST API からはできません**（docs の *"persistently stored and cannot be externally modified after being written"* と整合）。
+
+> ⚠️⚠️ **ただし「改竄不能」と言い切れるのは REST API 経由に限ります** 〈rev.3 レビューで訂正〉。**rev.3 初出時は「消える経路はリテンションルールだけ」と書き、それを安全性の根拠として扱っていましたが、逆です。** 次の 3 経路が残ります:
+>
+> | # | 経路 | 内容 |
+> |---|---|---|
+> | **1** | ⚠️⚠️ **リテンションルールによる狙い撃ち消去** | **R-01 は Retention rules ADMIN を持ちます。** `dataType=AUDIT` + `type=<画像アクセス用>` + `maximumAge=1` を 1 本入れれば証跡だけ消せます（`source` で特定カメラ分だけも可能）。→ **対策: `management` テナントから `editable: false` で作成 + AS-11b**（§7.2 / §13.3.6） |
+> | **2** | ⚠️ **`time` を過去日付で書く** | `time` は writable。**リテンションが `time` 基準なら、書いた瞬間から「古いレコード」になり次回削除で消えます**（判定基準は未確認・**CU-31**）。→ **対策: §11.11 MS-g** |
+> | **3** | ⚠️ **バックアップからのリストア** | 監査レコードが巻き戻ります（§12.6 / CU-30） |
+>
+> **また、S-15（Edge root）は MongoDB を直接操作できます**（§11.1 / CU-29）。
+
+> ⚠️ **「任意のアプリケーションログの置き場」として使わないでください。** 理由:
+>
+> - **`AUDIT` リテンションが全 type に一律にかかります**（種別ごとに変えられるかは **CU-22** で未確認）。ログを混ぜると、**監査証跡の保持期間がログの都合に引きずられます**
+> - **Administration の Audit logs 画面のフィルタは type / 日時 / user の 3 つだけ**です。独自 type が作れない以上、**自作レコードは既存の監査記録に埋もれます**
+> - **書き込みに `ROLE_AUDIT_ADMIN` が要ります**（§11.2）。アプリが自由に叩ける API ではなく、**この 1 本のためにサービスユーザーを立てる**設計になります
+> - Cumulocity 自身の位置づけは *"Whenever a **security-relevant** event occurs, it must be logged for potential auditing"* です。**「セキュリティ上意味のある事象」に限って使ってください。**
+
+> ⚠️ **監査レコードの中身にも規約が要ります**（CU-18 決定後に §6.8 か §11 に規約として起こすこと）。現時点で確定している制約:
+>
+> - **`auditRecord.type` は固定 enum なので独自 type は作れない** [確]。⚠️ **ただし `Event` を流用してはいけません**〈rev.3 レビューで訂正〉。**`type` は `AUDIT` リテンションの絞り込みキーであり**（§7.2）、**Cumulocity 自身が使う値を選ぶと ①画像アクセス記録だけ長期保持する分割ができない ②Audit logs 画面の type フィルタで既存記録に埋もれる ③機械抽出できない**。**20 値のうち本構成で発生しない値を選んでください** → **CU-28**
+> - `source` は **対象カメラ**（画像解析装置ではない）。§6.2 の `source` 規約に合わせる。⚠️ **(D) を採る場合も `source` はカメラのままにしてください**（バイナリ MO にすると、削除バッチでバイナリを消したときに `source` が迷子になります）。⚠️ **ただし `source` にカメラを使うと `AUDIT_READ` permission on the source が効きます** — Inventory ロールに `scope: AUDIT` を入れないこと（§11.2 / AS-13(b)）
+> - ⭐ **`x_ImageAccess` に画像の SHA-256・`binaryId`・`length` を入れてください**〈rev.3 レビューで追加〉。`PUT /inventory/binaries/{id}` / `PUT /event/events/{id}/binaries` が存在するため、**「誰がいつ見たか」を残しても「その時点で何が写っていたか」は残りません。** ハッシュは個人情報ではないので下の禁則に抵触しません
+> - ⭐ **証跡の時刻は `creationTime`（プラットフォーム付与・`readOnly`）を正とし、`time` は事象時刻の参考値**とする（§11.11 MS-g）
+> - ⚠️ **監査レコード自体に画像・特徴量・氏名を書かない。** 書くのは ID と操作種別のみ。**監査ログが二次的な個人情報の器になるのを防ぐ**（Cumulocity 自身も *"avoid logging details such as username, IP address or the contents of messages, unless needed for security auditing"* と述べている）。⚠️ **同じ禁則を R-14 のアプリケーションログにも適用してください**（§11.11 MS-f） — 適用しないと、**ingress アクセスログ案を却下した理由③がそのまま自作マイクロサービスで再発します**
+
+> ⚠️ **検討したが推奨しない案: Edge の ingress / Web サーバのアクセスログ収集。** Edge は root アクセスが可能で k3s 上で動くため技術的には可能ですが、**① SSO（Cookie / Bearer）だと操作者名がアクセスログに出ない**、**② Edge 内部の ingress 設定の書き換えはサポート外でアップグレードで失われる**、**③ Cumulocity の監査ログではないため `AUDIT` リテンションと `ROLE_AUDIT_READ` の保護の外に出る**（個人情報アクセス記録を平文テキストで長期保管することになる）。**この 3 点により、本書では選択肢に含めていません。**
+
 ### 15.4 運用に効くもの
 
 | # | 項目 | 確認方法 | 優先度 | 既存 ID |
@@ -3495,24 +4303,39 @@ scripts/
 | — | **テナント CA 自動更新（毎年 10/2）時の再エンロール動作** | 検証環境でシミュレート（CT-32） | **最高** | **SV-25 / TE-7** |
 | — | **SSO からローカル認証へ戻す手順** | 実機検証 → runbook 化（CT-27） | **最高** | **SV-04** |
 | — | **全拠点合算のスケール** | 負荷試験（CT-28） | **最高** | **SV-14** |
-| — | **RTO/RPO、BOX・thin-edge のバッファ保持時間** | 実測 + 設計判断 | **最高** | **SV-29 / TE-10** |
+| — | **RTO/RPO、BOX・thin-edge のバッファ保持時間** | 実測 + 設計判断（**§12.6.5 に算定式を追加**〈rev.3〉）。⚠️ **RTO の支配項は ③OS 準備 + ④150GB 級の転送 + ⑥RS-1（証明書の再エンロール）。分単位にはなりません** | **最高** | **SV-29 / TE-10 / CU-33 / CU-34** |
+| — | ⭐ **バックアップ運用の担当**〈rev.3〉 | 担当決定 | **最高**。⚠️ **公式に取得ツールが無いため、取得ジョブ・保管・暗号化・世代破棄・監視（§12.7 ⑮）・定期リストア試験（BK-f / RB-7）はすべて自前です。** D17 により**これが全損に対する唯一の備え**です | **CU-33 / CU-30** |
 | — | **基盤自身の異常のアラート通知先** | 設計 + 担当決定 | **高**。⚠️ **メール不採用のため唯一の検知経路** | **SV-34 / TB-5** |
 | — | **トークン発行プロキシ（N-02）の実装主体** | 担当決定 | **高**。決めないと通知経路全体が止まる | **TB-3** |
+| — | ⭐ **画像削除バッチ（X-04）の実装主体**〈rev.3〉 | 担当決定 | **高**（CU-18 で案 (D) を採る場合）。⚠️ **ファイルリポジトリにはリテンションが効かないため、これが個人情報の保存期間を守る唯一の手段になります**（§7.4）。**バッチの停止を検知する監視（§12.7 ⑪）まで含めて設計すること。** ⚠️ **§11.7 AX-7（拠点横断の書込権限を常時保持しない）との整合を先に取ること** — `owner` 条項を使う回避策あり（§15.3） | **[要決定]**（TB-4 と同じ書式で起票すること） |
 | — | **オフロードバッチ（X-03）の実装主体** | 担当決定 | **高**。⚠️ **稼働開始から 90 日以内が期限** | **TB-4** |
 | — | Edge のホスト側から admin パスワードを復旧する手段 | 検証環境 | 高。成立すればエスクローの必要性が下がる | **SV-37** |
 | — | 証明書・社内 CA ローテーション手順（新旧並行の移行期間） | 設計 + 検証環境 | 高 | **SV-22** |
 | — | メタ監視の向き（D9 との整合） | 設計判断 | 中 | **SV-23** |
 | — | 案件アプリのトークン再取得ロジック | 案件側との合意 | 中 | **SV-36** |
 | — | 運用知識基盤が必要とする分析データの期間 | 設計判断 | 高。**90 日超ならオフロードが唯一のデータ源** | **SV-20** |
+| **CU-35** 〈rev.4〉 | **Edge のリリースサイクル・各版のサポート期限** | ベンダーへ書面照会（SV-50 と同じ経路で） | **高**。UP-a（年 1 回以上の追従）の周期の根拠。**メジャーはスキップ不可** [確] なので、放置コストが段数で積算する（§12.10.2） | — |
+| **CU-36** 〈rev.4〉 | **ホスト OS のディストリビューションと版の確定・記録** | 設計判断（K3s のサポート OS から選定）→ 台帳記録 | **高**。**復元先の「同一（または互換）OS」[確] の判定基準**（§12.6.1 Step 2 / §12.10.4 OS-a）。検証環境と本番で揃える | — |
+| **CU-37** 〈rev.4〉 | **Edge / K3s / ホスト OS の脆弱性情報の受け口と対応期限** | 設計判断 + ベンダー通知の登録 | **高**。**現状、CVE を誰も受信していません**（thin-edge 側 TE-17 のみ設計済み）。閉域網は自動更新が無く、受け口が無ければ永遠に当たらない（§12.10.4 OS-e） | **TE-17（thin-edge 側）** |
+| **CU-38** 〈rev.4〉 | **Keycloak 担当との合意事項一式** — 退場 SLA（AC-b）・可用性目標・Keycloak 自身のバックアップ・バージョンアップ時の互換確認・相互告知（KC-a） | Keycloak 担当との合意（文書） | **高**。**Keycloak は Edge のバックアップに一切含まれず**、停止すると SSO 全断（break-glass のみ残る）。この影響評価自体が rev.4 まで欠落 | **CU-9（受領値）** |
+| **CU-39** 〈rev.4〉 | **Edge プラットフォームログの恒常収集の範囲**（収集しない / operator・ingress のエラーのみ 等） | 設計判断 | 中。**「収集しない」も明示的な設計判断として記録する**（§12.10.10 LG-a/LG-b — 個人情報混入と保護外の二重化リスクがあるため既定は「収集しない」） | — |
+| **CU-40** 〈rev.4〉 | **ホスト再起動後に Edge が無操作で完全復帰するか**（K3s の自動起動 → 全 Pod Running → 両テナント応答） | 検証環境（W1。ST-c の合否判定） | **高**。復帰しないなら、**停電・OS パッチのたびに手作業**が要り、計画停止 runbook（§12.10.3）の書き方が変わる | — |
+| **CU-41** 〈rev.4〉 | **MongoDB 容量増設の実手順**（`c8yedge config` での増加コマンド・再起動要否・所要時間） | 検証環境で実測 | 中。§12.7 ⑤ の警告（70%）から増設完了までのリードタイムが決まらないと、しきい値の妥当性も決まらない（§12.10.5） | — |
+| **CU-42** 〈rev.4〉 | **バックアップ経過時間（§12.10.5 ⑮）を Otel Collector パイプラインへ取り込む実装方式** | 設計判断 + 検証環境で実装 | 中。バックアップジョブはホスト OS 上の自前ジョブで Edge operator の `:3443/metrics` の管轄外。[判] 推奨は node_exporter textfile collector（§12.10.5） | — |
 
 ### 15.5 文書管理上の未処理事項
 
 | # | 項目 | 内容 |
 |---|---|---|
-| **CU-14** | ⚠️ **[設定書] §4 の移管作業** | 本書 §0.3 の移管表に従い、[設定書] §4 を削除して本書への参照に置き換える。**それまでは記述が二重に存在する**（齟齬があった場合は本書が優先） |
-| **CU-15** | **[連携仕様] への反映** | 本書で新規定義した `x_Site` / `x_SensingBox` を [連携仕様] §4.3 に反映する |
-| **CU-16** | **[担当範囲] との相互参照の整理** | [担当範囲] §4（Cumulocity Edge 担当作業）が本書を参照する形に更新する |
-| **CU-17** | **項目 ID 体系の統一** | 本書で追加した ID（R-10〜R-13 / G-04 / D-10〜D-12 / M-03 の一部）を [設定書] §3 の体系に正式に吸収する。**放置すると [設定書] 側が別の内容で同じ ID を採番した場合に衝突する** |
+| **DOC-6** 〈rev.4 で CU-14 から改称〉 | ⚠️ **[設定書] §4 の移管作業** | 本書 §0.3 の移管表に従い、[設定書] §4 を削除して本書への参照に置き換える。**それまでは記述が二重に存在する**（齟齬があった場合は本書が優先） |
+| **DOC-7** 〈rev.4 で CU-15 から改称〉 | **[連携仕様] への反映** | 本書で新規定義した `x_Site` / `x_SensingBox` を [連携仕様] §4.3 に反映する |
+| **DOC-8** 〈rev.4 で CU-16 から改称〉 | **[担当範囲] との相互参照の整理** | [担当範囲] §4（Cumulocity Edge 担当作業）が本書を参照する形に更新する |
+| **CU-17** | **項目 ID 体系の統一** | 本書で追加した ID（R-10〜R-16 / G-04 / D-10〜D-12 / M-03〜M-04 の一部）を [設定書] §3 の体系に正式に吸収する。**放置すると [設定書] 側が別の内容で同じ ID を採番した場合に衝突する**。✅ 〈rev.4 で解消〉**本書内の `CU-14/15/16` 二重採番**（§15.0 の技術的な CU-14/15/16 と、本節にあった文書管理系の CU-14/15/16 が別内容で衝突していた問題）**は、本節側を `DOC-6/7/8` へ改称して解消しました。** ⚠️ **`CK-7` は参照だけで表に行がありません**（§2.8。未解消のまま残っています）。**次回改版で解消してください** |
+| **DOC-1** 〈rev.3〉 | ⭐ **CU-18 決定後にやること**（現在は保留中） | 決定したら**以下をまとめて起票・確定**してください。**散文で書くと迷子になるので、この行を消化リストとして使ってください**:<br>□ **§11.1 S-16**（画像配信 / 監査書込マイクロサービス）の内容確定<br>□ **§11.4 R-14** の最小ロール確定（(D) なら `ROLE_BINARY_READ` + `ROLE_AUDIT_ADMIN`）<br>□ **§11.11** の認可仕様を実装要件として [担当範囲] に渡す<br>□ **§13.3.9 M-04**（ファイルリポジトリの `type` 名前空間規約）<br>□ **§13.3.6 X-04**（画像削除バッチ）と **§15.4 の実装主体**（TB-4 と同じ書式で）<br>□ **§13.2 トレース表**に「§6.8 スナップショット格納」の行を追加<br>□ **§13.3.4** に R-14 の行、**§13.6 `users.json`** に R-14<br>□ **§13.4** に R-14 デプロイ工程を追加<br>□ **CU-28**（監査レコードの `type` 値）の確定<br>□ **CU-5** の `AUDIT` 日数を法務と確定 → §13.3.6 ②<br>□ ⭐ **構成図 `cumulocity-iot-architecture.drawio` の注記修正**（DOC-2） |
+| **DOC-2** 〈rev.3〉 | ⭐ **構成図との齟齬** | 構成図の注記が **「スナップショット: 初期版は Cumulocity イベント添付のみ…将来はオブジェクトストレージ本体+サムネイル添付へ移行(設計文書§4.6)」** のままです。**前提 9 / CU-18 は (A)/(A′)/(D) のいずれでもこの注記と正面衝突します。** 本文は 2 箇所で「構成図側の修正も要る」と書いていますが**作業として起票されていませんでした**。⚠️ 参照先「設計文書§4.6」も §0.3 の移管でリンク切れになります |
+| **DOC-3** 〈rev.3〉 | **[担当範囲] との齟齬** | ① **§6.6 / TE-14 / W0-11**（スナップショット添付ワーカー）が `tedge upload c8y` → **イベント添付**を前提に担当案を組んでいる。**CU-18 で (A)/(A′)/(D) を採るとこの議論の土台ごと消えます**（(D) では `tedge upload c8y` のショートカットが使えない）。⚠️ **W0-11 は CU-18 より前に来るので、順序を入れ替える必要があります**<br>② リテンション日数（`AUDIT`）の決定主体・時期が rev.3 の CU-5 更新（③個人情報アクセス記録の保存義務期間 / 法務）を反映していない |
+| **DOC-4** 〈rev.3・rev.4 で④追加〉 | **[設定書] との齟齬** | ① `AUDIT` を「**K-c（設定変更の追跡要件）から逆算**」としており、rev.3 の 3 つ目の入力と食い違う<br>② X-02 が「リテンションが添付に及ぶかは公式に記載なし（SV-06）」のまま（本書 §7.4 は「及ぶ [確K]」）<br>③ 構成図トレースがイベント添付固定<br>④ ⚠️ 〈rev.4〉**[設定書] §4.10 がサービスアカウント削除→再作成の理由を「ユーザー ID が変わるため」としたまま**で、本書 §11.4「[確] ユーザー ID は変わりません…rev.1 は理由が誤りでした」という訂正と正面から矛盾している。**齟齬があった場合は本書が優先**（§0.3）だが、[設定書] 側の対象者リスト（R-05, R-06, R-08, R-09）も R-11/R-12 を含まず古いままなので、移管作業（DOC-6）で一括して解消すること |
+| **DOC-5** 〈rev.4〉 | ⭐ **[担当範囲] への運用設計の反映** | rev.4 の §12.10 新設に伴う [担当範囲] 側の作業:<br>□ **§10.3 の runbook 追補 8 件**（§12.10.6 の表。**採番は [担当範囲] 側で** — 本書は意図的に RB-14 以降を振っていません）<br>□ **本書が rev.4 で訂正した参照誤り 2 件の突合**（§11.5 RB-11→RB-9・§12.5 の RB-13 誤参照）<br>□ **運用体制（要員・当番・受付窓口・SLA・エスカレーション）の設計** — 3 文書のどこにも無いことを rev.4 で確認済み（§12.10.1）。SV-34 / TB-5（通報先）とセットで<br>□ **周期作業カタログ（§12.10.1）の担当列を埋める**<br>□ TE-17（脆弱性対応リードタイム）に **Edge / K3s / OS 側（CU-37）**を追加 |
 
 ---
 
@@ -3581,7 +4404,7 @@ scripts/
 ### 社内文書
 
 - [IoT連携チーム_担当範囲設計書.md](IoT連携チーム_担当範囲設計書.md) — **本書のベース。担当範囲・thin-edge 側実装・WBS・Ready for Service の正**
-- [Cumulocity構成準拠セットアップ設定書.md](Cumulocity構成準拠セットアップ設定書.md) — **適用手順（P0〜P7）の正**。⚠️ §4 は本書へ移管（§0.3 / CU-14）
+- [Cumulocity構成準拠セットアップ設定書.md](Cumulocity構成準拠セットアップ設定書.md) — **適用手順（P0〜P7）の正**。⚠️ §4 は本書へ移管（§0.3 / DOC-6）
 - [Cumulocity設定定義書.md](Cumulocity設定定義書.md) — 設定項目の網羅カタログ。⚠️ [設定書] §0.2 の訂正が優先
 - [Cumulocity設定エクスポート投入ガイド.md](Cumulocity設定エクスポート投入ガイド.md) — go-c8y-cli の実装技法・冪等化パターン A〜E
 - [../../IoTPlatform_cc/data-integration-spec_new.md](../../IoTPlatform_cc/data-integration-spec_new.md) — IF-nn の正
@@ -3599,7 +4422,12 @@ scripts/
 | インストール・2 テナント・TLS 要件・ライセンス・registry credentials・前提要件 | `https://cumulocity.com/docs/2026/edge/installing-edge/` |
 | **機能比較表（`Included` の一覧）・100 tps/CPU コア** | `https://cumulocity.com/docs/2026/edge/edge-introduction/` |
 | メールサーバー・`c8yedge config`（**ドメイン / TLS / ライセンスの更新手順**）| `https://cumulocity.com/docs/2026/edge/manage-edge/` |
-| **バックアップとリカバリ・Prometheus メトリクスエンドポイント** | `https://cumulocity.com/docs/2026/edge/edge-operations/` |
+| **バックアップとリカバリ**（⚠️ **提供されているのは復元手順のみ。取得手順は *"implement appropriate data protection measures"* の 1 行**・§12.6.1）**・Prometheus メトリクスエンドポイント** | `https://cumulocity.com/docs/2026/edge/edge-operations/` |
+| **MongoDB — Back Up with Filesystem Snapshots** 〈rev.3〉 — *"the data files reflect a consistent state as of the last checkpoint. Checkpoints occur with every 2 GB of data or every minute."* / データとジャーナルが**別ボリューム**なら `db.fsyncLock()` が必要（§12.6.2） | `https://www.mongodb.com/docs/manual/tutorial/backup-with-filesystem-snapshots/` |
+| **K3s — Cluster Datastore** 〈rev.4〉 — *"SQLite is the default datastore"*（シングルノードの既定・§12.6.2） | `https://docs.k3s.io/datastore` |
+| **K3s — Backup and Restore（SQLite）** 〈rev.4〉 — *"take a copy of `/var/lib/rancher/k3s/server/db/`"* / **server token（`server/token`）を欠くと復元不能**（*"the snapshot will be unusable"*・§12.6.2） | `https://docs.k3s.io/datastore/backup-restore` |
+| **K3s — Stopping K3s** 〈rev.4〉 — `systemctl stop k3s` はスーパーバイザのみ停止・**コンテナ停止には `k3s-killall.sh`**（*"The cluster data will not be deleted."*・§12.6.2b 案 (iii)） | `https://docs.k3s.io/upgrades/killall` |
+| **K3s — Local Path Provisioner** 〈rev.4〉 — PV の既定パスは **`/var/lib/rancher/k3s/storage`**（§12.6.2） | `https://docs.k3s.io/add-ons/storage` |
 | **実測ベンチマーク（Narrow / Wide シナリオ）** | `https://cumulocity.com/docs/2026/edge/benchmarks/` |
 | ブランディング・Web SDK | `https://cumulocity.com/docs/2026/edge/using-edge/` |
 | **Edge CR の spec 13 項目**（`storageClassName` は変更不可 / `mongodb…storage` は増加のみ可）| `https://cumulocity.com/docs/2026/edge/edge-custom-resource-definition/` |
@@ -3608,11 +4436,7 @@ scripts/
 
 | 内容 | URL |
 |---|---|
-| **Core OpenAPI**（Notification 2.0 の RBAC バイパス・`NotificationSubscription` スキーマ・`bulkNewDeviceRequests`・`creationRamp` / `groupId` / `failedParentId`・ロール名・パスワード制約・**アラーム de-duplication と suppression**・**Notification 2.0 の service quotas**・**⭐ `alarm.type.mapping`（docs サイトには記載が無く、ここだけが根拠）**） | `https://cumulocity.com/api/core/dist/c8y-oas.yml` |
-
-> ⚠️⚠️ **`cumulocity.com/api/...` の Redoc ページは、ブラウザ以外から取得すると 4KB 程度の SPA シェルしか返りません。** 「記述が無い」と誤判定する原因になります。**必ず上記の生 spec（`c8y-oas.yml`、約 1.5MB）をダウンロードして検索してください。**
->
-> ⚠️ **本書の [確] を疑うときの作法**: 一次情報を最低 2 経路（docs の別ページ / OpenAPI 生 spec / GitHub ソース / Web 検索）で探し、**探索経路を書けるときだけ「記述が無い」と結論してください。** rev.1 に対するレビューでは、この手順を踏まなかったことによる誤判定（実際には公式に記述があるのに「無い」と判断する）が複数回発生しました。
+| **Core OpenAPI**（Notification 2.0 の RBAC バイパス・`NotificationSubscription` スキーマ・`bulkNewDeviceRequests`・`creationRamp` / `groupId` / `failedParentId`・ロール名・パスワード制約・**アラーム de-duplication と suppression**・**Notification 2.0 の service quotas**・**⭐ `alarm.type.mapping`（docs サイトには記載が無く、ここだけが根拠）**・〈rev.3〉**`auditRecord.type` の固定 enum 20 値**（§6.8 制約 5）・〈rev.3〉**`getEventBinaryResource` の Required roles ＝ `ROLE_EVENT_READ`**（§6.8 制約 6 / §11.3）・〈rev.3〉**`postAuditRecordCollectionResource` の Required roles ＝ `ROLE_AUDIT_ADMIN`**（§11.2 / AS-13）・〈rev.3〉**`getBinaryResource` の Required roles ＝ `ROLE_INVENTORY_READ` / `ROLE_BINARY_READ` / owner / `MANAGE_OBJECT_READ` on the resource**（§15.3 案 (D) の根拠）・〈rev.3〉**Audit API に `PUT` / `DELETE` が存在しないこと**） | `https://cumulocity.com/api/core/dist/c8y-oas.yml` |
 | **Fragment library**（`c8y_SupportedConfigurations` / `c8y_DownloadConfigFile` / `c8y_UploadConfigFile` / `c8y_RequiredAvailability`） | `https://cumulocity.com/docs/device-integration/fragment-library/` |
 | 設定管理の 3 系統 | `https://cumulocity.com/docs/device-management-application/managing-device-data/` |
 | bulk operation ウィザード | `https://cumulocity.com/docs/device-management-application/monitoring-and-controlling-devices/` |
@@ -3628,6 +4452,15 @@ scripts/
 | **MQTT device integration**（ClientId 形式・**コロンは deviceIdentifier に使用不可**） | `https://cumulocity.com/docs/device-integration/mqtt/` |
 | **Streaming Analytics introduction**（Apama-ctrl バリアントごとの機能差） | `https://cumulocity.com/docs/streaming-analytics/introduction-analytics/` |
 | **Event file binary attachment retention rules（KB）** — 添付にもリテンションが及ぶ | `https://community.cumulocity.com/t/event-file-binary-attachment-retention-rules/14387` |
+| **Audit logs** 〈rev.3〉 — **記録対象は create / update / delete とログイン・ログアウトのみ**。参照・DL は記録されない（§6.8 制約 5） | `https://cumulocity.com/docs/2025/standard-tenant/audit-logs/` , `/2024/standard-tenant/audit-logs/` |
+| **Security aspects** 〈rev.3〉 — *"enables applications and agents to write audit logs, which are persistently stored and **cannot be externally modified after being written**"* / *"writes own audit records related to **login and device control operations**"* | `https://cumulocity.com/docs/2026/concepts/security/` |
+| **Handling personal data "at rest" in log files（Apama）** 〈rev.3〉 — ログに個人情報を書かない原則（§15.3 CU-18 の監査レコード規約） | `https://cumulocity.com/apama/docs/latest/protect-personal-data/handling-personal-data-at-rest-in-log-files/` |
+
+> ⚠️⚠️ **`cumulocity.com/api/...` の Redoc ページは、ブラウザ以外から取得すると 4KB 程度の SPA シェルしか返りません。** 「記述が無い」と誤判定する原因になります。**必ず上記の生 spec（`c8y-oas.yml`、約 1.5MB）をダウンロードして検索してください。**
+>
+> ⚠️ **本書の [確] を疑うときの作法**: 一次情報を最低 2 経路（docs の別ページ / OpenAPI 生 spec / GitHub ソース / Web 検索）で探し、**探索経路を書けるときだけ「記述が無い」と結論してください。** rev.1 に対するレビューでは、この手順を踏まなかったことによる誤判定（実際には公式に記述があるのに「無い」と判断する）が複数回発生しました。
+>
+> ⚠️ **rev.3 でも同種の誤判定が 1 件発生しました**: 「監査ログの enum に read 系の値は存在しない」と書きましたが、**Audit logs ページの type 表に `Report` → *"…statistics accessed"* があり反例でした**（§6.8 制約 5）。**スキーマの enum だけを見て「無い」と判断せず、docs 側の一覧表も必ず突き合わせてください。**
 
 ### thin-edge.io（バージョン 2.0.1）
 
@@ -3670,6 +4503,64 @@ scripts/
 |---|---|---|
 | rev.1 | 2026-08-20 | 初版。[担当範囲] をベースに、Cumulocity 側設計を概念軸で再構成。[設定書] §4「主要設計の詳細」を本書へ移管（§0.3）。案 β 前提・案 α は付録 A |
 | **rev.2** | **2026-08-21** | **一次情報照合（ファクトチェック）の反映**。8 名の独立レビュアーが約 350 件の事実主張と出典 URL 39 件を Cumulocity 公式 docs / Core OpenAPI 生 spec / thin-edge.io ソース / go-c8y-cli ソースと逐語照合。**設計変更を伴う修正 7 件**（下表）ほか、確度記号の格上げ 23 件・出典の修正 6 件。詳細は [ファクトチェック結果](Cumulocity利用設計書_ファクトチェック結果.md) |
+| **rev.3** | **2026-08-23** | **個人情報を含むスナップショット画像のアクセス監査**（前提 9 / CU-18）の追加と、**5 観点レビュー**（一次情報照合 / 整合性・ID / 敵対的レビュー / 個人情報横断 / 実行可能性）の反映。**新規 ID**: 前提 9 / 制約 5・6（§6.8）/ CU-18〜CU-32 / CT-5b〜CT-5d / AS-11b・AS-13〜AS-15 / CK-8 / R-14〜R-16 / S-15・S-16 / M-04 / X-04 / DOC-1〜DOC-4 / **§11.11（新設）**。**CU-18 は未決のまま残しています** |
+| **rev.4** | **2026-08-24** | ⭐⭐ **バックアップ設計の完成と運用設計の新設。4 観点の並列サブエージェントレビュー＋独立検証を実施し、確認された 13 件をすべて反映**（confirmed 13 / rejected 0）。①rev.3 が [要決定] で止めていた **CU-33（取得方式・頻度・世代・保管先）と CU-30（暗号化・破棄）に [判] 推奨設計を記載**（§12.6.2b / §12.6.6）②**取得・復元手順の実体化**（§12.6.2b / §12.6.4b。**VM 復元経路の手順と CT-35b を追加**）③K3s（datastore・token・killall・local-path）と certificate-authority の一次情報で §12.6 を補強、**CU-34 に「再エンロール不要」の見通し [推]** ④3 文書横断のカバレッジ調査（28 トピック）で判明した欠落を **§12.10（運用設計）として新設** — Edge アップグレード（UP-a〜f）・計画停止（ST-a〜c）・ホスト OS（OS-a〜e）・監視しきい値・期限台帳・アカウント棚卸し（AC）・監査レビュー（AU / **S-17・R-17 新設**）・Keycloak 依存（KC）・プラットフォームログ（LG）・変更管理（CM）。**新規 ID**: BK-j〜BK-m / UP / ST / OS / AC / AU / KC / LG / CM 各系列 / S-17 / R-17 / CT-35b / CU-35〜CU-42 / DOC-5 |
+
+#### rev.4 のレビューで訂正した自らの誤り
+
+| # | 章 | rev.4 初出時の記述 | 訂正 |
+|---|---|---|---|
+| 1 | §12.6.6 | CU-30 法務確認リストで「②③④は技術的に回避不能」と無条件に断定 | **自己矛盾。** 同じセル内で世代保持短縮・CU-18 (A) 系採用という回避策を提示していた。「現行の推奨設計を前提とする限り」という条件付きに訂正 |
+| 2 | §12.6.2b | 「CU-33への回答」表がヘッダ4列・データ行3列で崩れていた | 3列に統一。実害（列ずれ表示）を解消 |
+| 3 | §11.1 / §11.2 | S-17（監査担当）に `ROLE_AUDIT_READ` を付与する具体的ロールが存在しなかった | **R-17 を §11.2 に新設**し、§13.3.4 に投入行を追加 |
+| 4 | §12.6.2b / §12.6.4b | 取得・復元手順に「runbook RB-BK1/RB-BK2」と本書側で仮の runbook 番号を振っていた | §12.10.6 で「採番は [担当範囲] 側」と自ら定めた原則と矛盾。**ラベルを削除**（正式番号は [担当範囲] 側の起票を待つ） |
+| 5 | §12.6.2b / §12.6.4b | 復元経路を「(R-A)/(R-B)」と表記 | 既存のグローバルロール ID（R-01〜R-16）と紛らわしい。**「VM 復元」/「クリーン復元」に改称** |
+| 6 | §12.6.4b | 「VM 復元」経路に具体的な操作手順が無く、CT-35 の試験対象からも除外されていた | **手順を追記し、CT-35b（年1回・VM 復元経路専用の試験）を新設** |
+| 7 | §12.6.2b③ | 「日次7世代＋週次4世代＋upgrade前1世代 ≒ 遡及約35日」の内訳計算が本文に無い | 検算すると素直な GFS 方式では約28日。**BK-m で生成規則を明記し、28日に訂正** |
+| 8 | §12.10.5 | バックアップ監視しきい値「経過時間>26時間」の実装経路が未定義 | 28時間に緩和し、**node_exporter textfile collector 経由の実装方式を明記**（CU-42） |
+| 9 | §12.6.2b④ | 保管容量「150GB×12世代≒2TB」の150GBが P-0-5 の最小要件（下限）のまま | **実ディスクサイズ基準に訂正**し、§12.10.1 の容量再算定トリガに統合 |
+| 10 | §12.10.2 UP-c | §12.6.2b②「イベント駆動3点」と数が食い違う4点目を独自に追加 | §12.6.2b②を4点に統合し、UP-cは同一事象への参照に修正 |
+| 11 | §15.5 | `CU-14/15/16` が §15.0 と本節とで別内容に二重採番されたまま（文書自身が CU-17 で認識していた既知の未解消事項） | 本節側を **DOC-6/7/8 に改称**して解消 |
+| 12 | §12.6.2 | MongoDB チェックポイント間隔の引用元が公式内で記述が割れている点を未注記 | 脚注を追加（結論への実害は無いことも明記） |
+| 13 | [設定書] との関係 | サービスアカウント復旧理由について [設定書] §4.10 が「ID が変わるため」のまま残り、本書の訂正と矛盾 | **DOC-4 に④として追加**（[設定書] は別途改訂が必要・§0.3 の方針どおり本書側の記述を正とする） |
+
+#### rev.4 で追加・訂正した主な内容
+
+| # | 章 | 内容 |
+|---|---|---|
+| 1 | **§12.6.2b（新設）** | ⭐⭐ **CU-33 への回答**: ①VM 原子スナップショット → エクスポート → 即削除（crash-consistent。公式が snapshot-based backup を復元前提として許容 [確]）②日次＋イベント駆動 3 点 ③日次 7＋週次 4＋upgrade 前 1（≒35 日 — 個人情報の最悪残存期間として法務確認の入力に）④別障害ドメインに 2TB。**案 (iii) コールドコピーを K3s 公式手順（`systemctl stop k3s` → `k3s-killall.sh`）で具体化** |
+| 2 | **§12.6.2 / §12.6.3** | K3s の一次情報で保全対象を精密化: **`server/token` を欠くと復元不能** [確]・SQLite datastore・local-path の各パス。**新規約 BK-j（世代ごとに同一版インストーラ一式を併置 — アップグレードは連続メジャーのみ・ロールバック手順なし [確] のため）/ BK-k（スナップショット残置禁止）/ BK-l（テナント CA 作成直後に 1 世代）** |
+| 3 | **§12.6.4 RS-1 / CU-34** | ⭐ **リストア後のデバイス再接続に「再エンロール不要」の見通し** [推]: CA はバックアップに含まれ、照合はチェーン検証、**auto-registration 既定 ON でデバイスユーザーは初回 MQTT コールで再作成** [確]。CT-35(c) で実証する |
+| 4 | **§12.6.4b（新設）** | **復元 runbook**: 発動判断（Git 再投入との使い分け）→ 経路選択（R-A: VM イメージ復元 / R-B: 公式のクリーン OS 経路）→ **復旧後チェックリスト 10 手順（キルスイッチが先頭）**。リストア試験は年 1 回＋アップグレード時・R-B 経路で |
+| 5 | **§12.6.6** | **CU-30 への推奨案**: 保管先 at-rest 暗号化・鍵は admin エスクロー体系で別封筒・S-15 統制と同枠のアクセス台帳・世代ローテーション破棄。**法務確認リスト 4 点**（最悪残存 35 日・リストア時の一時復活・削除請求に応じられない 等） |
+| 6 | **§12.10（新設）** | ⭐⭐ **運用設計**: 周期作業カタログ／**Edge 本体アップグレード運用**（連続メジャーのみ・戻し＝リストアの重さ・閉域パッケージ運用）／**計画停止・起動**／**ホスト OS 運用**（rev.3 まで 0 件）／**監視しきい値の初期値**（§12.7 の 16 項目に数値）／**期限台帳と [担当範囲] への runbook 追補 8 件**／**アカウント棚卸し**（0 件だった入退社対応）／**監査ログ月次レビュー**（S-17 新設）／**Keycloak への要求仕様**（停止影響の評価が 0 件だった）／**プラットフォームログの方針**／**変更管理・検証環境の常設化** |
+| 7 | **訂正** | ①`c8yedge` サブコマンドは 4 つではなく **5 つ**（`package` の数え落とし・§12.6.1）②[担当範囲] への参照誤り 2 件（§11.5 の RB-11 → **RB-9**、§12.5 の「RB-13」は R-08 ライフサイクルの ID であり **TLS 証明書更新の runbook は存在しない** → §12.10.6 で起票）③§12.6.2 の「P-0-8 を追加してください」が追加済みなのに残っていた記述の解消 |
+
+#### rev.3 で追加した主な内容
+
+| # | 章 | 内容 |
+|---|---|---|
+| 1 | **§6.8** | **制約 5**（画像の参照・DL は監査ログに残らない）・**制約 6**（`GET /event/events/{id}/binaries` は `ROLE_EVENT_READ` で権限分離できない）。⭐ **制約 6 はイベント添付に固有**で、`/inventory/binaries` なら標準の権限モデルで分離できる |
+| 2 | **§15.3 CU-18** | 画像の置き場所と監査方式の **5 案**（A / A′ / D / B / C）。**本書では判断していません** |
+| 3 | **§11.11（新設）** | ⭐ **画像配信マイクロサービス（R-14）の認可仕様。** (A)/(A′)/(D)/(B) いずれでも配信主体は特権を持つため、**拠点分離を自前で再現しないと「直叩きは 403、正規経路は全開」になります** |
+| 4 | **§7.2 / §13.3.6** | ⭐ **`AUDIT` リテンションは `type` / `source` で絞れる**（`fragmentType` は不可）→ 画像アクセス記録だけ長期保持できる。⚠️ **同時に、証跡を狙い撃ちで消す経路にもなる**（対策: `management` テナントから `editable: false`） |
+| 5 | **§12.6（全面設計）** | ⭐⭐ **バックアップ／リストア。** 公式は**復元手順しか提供しておらず、取得手順は組織の責務**（`c8yedge` に backup / stop コマンドは無い）。**取得方式 3 案の比較（CU-33）・規約 BK-a〜BK-i・リストア後の二次問題 RS-1〜RS-9・RTO/RPO 算定式・CT-35/CT-36**。⚠️ **稼働中の `tar`/`rsync` は一貫性が無く復元できません** |
+| 6 | **§11.1 / §11.4 / §2.8 / §13.7** | ガードレール群 — `ROLE_AUDIT_ADMIN` を人間に付けない（R-15 / AS-13）・Inventory ロールに `scope: AUDIT` を入れない（R-16）・バイナリ MO の隔離（CK-8 / AS-14）・`AUDIT` リテンションの値検査（AS-11b）・R-14 の同一性検査（AS-15） |
+
+#### rev.3 のレビューで訂正した自らの誤り
+
+| # | 章 | rev.3 初出時の記述 | 訂正 |
+|---|---|---|---|
+| 1 | §6.8 制約 5 | 「`auditRecord.type` の enum に **read/view/download に相当する値は存在しない**」 | **誤り。** `Report` → *"…statistics accessed"* が反例。**Cumulocity は一部の参照を監査している。** 正しい理由は「**画像取得 API が監査対象操作の一覧に含まれていない**」 |
+| 2 | §15.3 CU-22 | 「`AUDIT` に `fragmentType` 絞り込みが効くか **[要確認]**」 | **実機確認不要。** spec に明記。`fragmentType` は不可だが **`type` / `source` は可** |
+| 3 | §15.3 | 「独自 type が作れないので **`Event` を流用するしかない**」 | **誤り。** `type` はリテンションの絞り込みキーなので、**本構成で発生しない enum 値を選ぶべき**（CU-28） |
+| 4 | §15.3 | 「**消える経路はリテンションルールだけ**」を安全性の根拠とした | **逆。** リテンションは**証跡を狙い撃ちで消す攻撃経路**。他に `time` 改竄・リストア・Edge root |
+| 5 | §15.3 CU-18 | 確認方法「**設計判断（実機不要）**」 | **(D)/(B) は CT-5c / CT-5d が要る**（§14.12 の 2b） |
+| 6 | §2.8 / §13.7 | CK-8(b) / AS-14(b) の検査対象を **R-02 / R-03 / R-04a / R-04b** とした | **R-04a/b は Inventory ロールでグローバル `ROLE_*` の器ではなく検査不能。** 実際に危ないのは **R-01 / R-05 / R-06a / R-06b / R-08 / R-10 / R-11** |
+| 7 | §15.3 | (B) の評価「(D) が成立するなら採る理由はほぼない」 | **不公平。** (B) は**イベント添付なのでリテンションが効く** ＝ (D) の最大欠点（削除バッチ）が無い |
+| 8 | §7.4 | 「§5 のメタ監視」 | **§12.7** |
+| 9 | §15.3 CU-24 | 「OpenAPI に**この操作だけ** Required roles の記載が無い」 | 252 operation 中 **18 件**が同様。`GET /inventory/managedObjects` も含む |
+| 10 | §16 | 出典表の途中に引用ブロックを挿入 | **表が分断され 18 行が崩れていた**。引用を表の後ろへ移動 |
 
 #### rev.2 の主な設計変更
 
