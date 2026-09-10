@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="site-architecture-r1" name="全体構成(配置構成・レビュー反映)">
-        <mxGraphModel dx="1994" dy="1157" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
+        <mxGraphModel dx="1509" dy="983" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1150" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -8,7 +8,7 @@
                     <mxGeometry height="640" width="620" x="40" y="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="wan" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontSize=14;fontStyle=1;dashed=1;dashPattern=4 4;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;arcSize=9;" value="閉域網" vertex="1">
-                    <mxGeometry height="880" width="150" x="690" y="40" as="geometry"/>
+                    <mxGeometry height="870" width="150" x="690" y="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="hq" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=10;fontSize=15;fontStyle=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;arcSize=2;" value="本社サーバールーム(オンプレ)" vertex="1">
                     <mxGeometry height="1090" width="780" x="870" y="40" as="geometry"/>
@@ -110,7 +110,10 @@
                     <mxGeometry height="60" width="170" x="1410" y="640" as="geometry"/>
                 </mxCell>
                 <mxCell id="vm2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontSize=12;fontStyle=1;fillColor=#fff2e0;strokeColor=#d79b00;strokeWidth=2;arcSize=6;" value="VM2(アセット層)" vertex="1">
-                    <mxGeometry height="170" width="720" x="900" y="860" as="geometry"/>
+                    <mxGeometry height="170" width="465" x="900" y="860" as="geometry"/>
+                </mxCell>
+                <mxCell id="vm3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontSize=12;fontStyle=1;fillColor=#fff2e0;strokeColor=#d79b00;strokeWidth=2;arcSize=6;" value="VM3(案件側アプリ・別ドメイン)" vertex="1">
+                    <mxGeometry height="170" width="245" x="1375" y="860" as="geometry"/>
                 </mxCell>
                 <mxCell id="bionote" parent="1" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=middle;spacingLeft=8;fontSize=9;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" value="※生体情報(顔データ)の取り扱い: 保持期間・保存場所・持ち出し禁止範囲は個人情報保護の特記事項として設計文書で規定(要検討)" vertex="1">
                     <mxGeometry height="25" width="660" x="930" y="995" as="geometry"/>
@@ -129,11 +132,11 @@
                 <mxCell id="lnk" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;" value="紐づけ確認アプリ&#xa;(基盤標準部品)&#xa;イベント×映像の突き合わせ" vertex="1">
                     <mxGeometry height="70" width="200" x="1160" y="910" as="geometry"/>
                 </mxCell>
-                <mxCell id="oa" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;" value="他アセット&#xa;(案件側アプリ 等)" vertex="1">
+                <mxCell id="oa" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffffff;strokeColor=#d79b00;" value="案件側アプリ" vertex="1">
                     <mxGeometry height="70" width="210" x="1390" y="910" as="geometry"/>
                 </mxCell>
-                <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=10;fillColor=#f5f5f5;strokeColor=#999999;arcSize=4;" value="配置の要点&#xa;・IdP(Keycloak)はVM1: 全コンポーネントが依存する共通インフラのため、アセット層(VM2)のデプロイ・再起動の影響を受けない&#xa;・新機器(画像解析装置)はGateway(thin-edge.io)を内蔵しCumulocity Edgeへ直接送信。旧機器(画像センシングBOX)は改造不可のため外部Gateway経由&#xa;・外部GatewayはVM1(サーバールーム側): BOXがバッファ+再送機能を持つ前提で網断を吸収できるため、全拠点分を一元集約。&#xa;　再送に伴う重複イベントはBOXアダプタで排除(冪等化)&#xa;・画像解析装置はDocker Compose構成(フロントエンド/バックエンド/ログ処理/画像解析パイプライン)。現場管理端末はフロントエンド経由でアクセス&#xa;・Cumulocity Edge=デバイス管理がメイン。外部アクセスはREST/MQTT API経由(Operational Storeへの直接アクセスは不可)&#xa;・Operational Store=短期運用データ(〜90日目安)/オブジェクトストレージ=長期保存。オフロードはその移送&#xa;・紐づけ確認アプリ: Operational Storeのイベント情報(REST API)とVMS映像(Genetec)を突き合わせて確認&#xa;・スナップショット: 初期版はCumulocityイベント添付のみ(Operational Storeと同一MongoDB格納・保持期間で消える)。&#xa;　将来はオブジェクトストレージ本体+サムネイル添付へ移行(設計文書§4.6)&#xa;・特徴量: 画像解析パイプラインが抽出→ベクトルDB格納→AIモデル改善サービス(クラウド)へ本社発・限定アウトバウンドで送信&#xa;・モデル更新: 保守端末(基盤運用会社・保守VPN)がクラウドから改善モデルを取得→ソフトウェアリポジトリに登録→&#xa;　ソフトウェア更新オペレーションを既存の拠点発MQTT接続で配信→thin-edgeのsm-pluginが適用(失敗時ロールバック)&#xa;・配置判断(D17): 全拠点を単一Cumulocity Edge・単一テナントに集約(1顧客閉域)。拠点区分はグループ+Inventoryロール&#xa;・VM1/VM2は論理区画。実配置ではCumulocity Edgeは専用VM分離(GSCはWindows Server要件)&#xa;―→ 実線=通常データ経路(太線=閉域網を横断する定常データ経路)　┄→ 破線=テレメトリ/クラウド連携/制御等の補助経路" vertex="1">
-                    <mxGeometry height="245" width="620" x="40" y="900" as="geometry"/>
+                <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=9;fillColor=#f5f5f5;strokeColor=#999999;arcSize=4;" value="配置の要点&#xa;・IdP(Keycloak)はVM1: 全コンポーネントが依存する共通インフラのため、アセット層(VM2)のデプロイ・再起動の影響を受けない&#xa;・新機器(画像解析装置)はGateway(thin-edge.io)を内蔵しCumulocity Edgeへ直接送信。旧機器(画像センシングBOX)は改造不可のため外部Gateway経由&#xa;・外部GatewayはVM1(サーバールーム側): BOXがバッファ+再送機能を持つ前提で網断を吸収できるため、全拠点分を一元集約。&#xa;　再送に伴う重複イベントはBOXアダプタで排除(冪等化)&#xa;・画像解析装置はDocker Compose構成(フロントエンド/バックエンド/ログ処理/画像解析パイプライン)。現場管理端末はフロントエンド経由でアクセス&#xa;・Cumulocity Edge=デバイス管理がメイン。外部アクセスはREST/MQTT API経由(Operational Storeへの直接アクセスは不可)&#xa;・Operational Store=短期運用データ(〜90日目安)/オブジェクトストレージ=長期保存。オフロードはその移送&#xa;・紐づけ確認アプリ: Operational Storeのイベント情報(REST API)とVMS映像(Genetec)を突き合わせて確認&#xa;・スナップショット: 初期版はCumulocityイベント添付のみ(Operational Storeと同一MongoDB格納・保持期間で消える)。&#xa;　将来はオブジェクトストレージ本体+サムネイル添付へ移行(設計文書§4.6)&#xa;・特徴量: 画像解析パイプラインが抽出→ベクトルDB格納→AIモデル改善サービス(クラウド)へ本社発・限定アウトバウンドで送信&#xa;・モデル更新: 保守端末(基盤運用会社・保守VPN)がクラウドから改善モデルを取得→ソフトウェアリポジトリに登録→&#xa;　ソフトウェア更新オペレーションを既存の拠点発MQTT接続で配信→thin-edgeのsm-pluginが適用(失敗時ロールバック)&#xa;・配置判断(D17): 全拠点を単一Cumulocity Edge・単一テナントに集約(1顧客閉域)。拠点区分はグループ+Inventoryロール&#xa;・VM1/VM2/VM3は論理区画。実配置ではCumulocity Edgeは専用VM分離(GSCはWindows Server要件)&#xa;・VM3(案件側アプリ)はCumulocity Edgeと別ドメイン(URL)で動作する外部システム。REST API(デバイス情報参照)でInventoryを参照し、Notification 2.0で通知を受信&#xa;・案件側アプリとCumulocity Edgeは同じKeycloakに対し、それぞれ独立にSSOログインする(セッション/トークンはドメインごとに別発行。RBACはエンドユーザー自身のCumulocityトークンで担保しD-e準拠)&#xa;―→ 実線=通常データ経路(太線=閉域網を横断する定常データ経路)　┄→ 破線=テレメトリ/クラウド連携/制御等の補助経路" vertex="1">
+                    <mxGeometry height="230" width="820" x="40" y="910" as="geometry"/>
                 </mxCell>
                 <mxCell id="extgw" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontSize=12;fontStyle=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;arcSize=5;" value="外部Gateway(BOX用・全拠点分を集約)" vertex="1">
                     <mxGeometry height="130" width="520" x="930" y="390" as="geometry"/>
@@ -440,6 +443,31 @@
                         </Array>
                         <mxPoint x="1670" y="1060" as="sourcePoint"/>
                         <mxPoint x="1680" y="450" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="r1e46" edge="1" parent="1" source="oa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;" target="c8yapi" value="デバイス情報参照&#xa;(REST API)">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1635" y="945"/>
+                            <mxPoint x="1635" y="190"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="r1e47" edge="1" parent="1" source="oa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="kc" value="OIDC認証&#xa;(案件側アプリ自身のログイン)">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1600" y="615"/>
+                            <mxPoint x="1150" y="615"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="r1e48" edge="1" parent="1" source="c8y" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="kc" value="SSO/OIDC">
+                    <mxGeometry relative="1" x="-0.0333" as="geometry">
+                        <mxPoint as="offset"/>
+                        <Array as="points">
+                            <mxPoint x="916.42" y="295"/>
+                            <mxPoint x="916.42" y="575"/>
+                        </Array>
                     </mxGeometry>
                 </mxCell>
             </root>
