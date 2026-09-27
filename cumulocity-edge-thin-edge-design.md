@@ -2,10 +2,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版数 | 0.6（ドラフト・レビュー用） |
+| 版数 | 0.7（ドラフト・レビュー用） |
 | 位置づけ | **社内の他案件が IoT 関連プロジェクトの基盤として利用する「IoT 基盤」（Cumulocity Edge＋thin-edge）の設計書**。drawio 図はこの基盤を使った**参照構成**（画像解析の案件）であり、本書に出てくる拠点・カメラ・BOX・識別情報の項目などは参照構成での例。利用案件が設計時に決めることは §3.4 |
 | 作成日 | 2026-09-23 |
-| 改版履歴 | 0.1 初版／0.2 **カメラを Cumulocity のデバイスとして扱わない方針に変更**（カメラ情報は画像解析パイプライン・BOXアダプタがまとめて親機器の情報として thin-edge の twin API で送る）、**カメラの死活監視を対象外に変更**、**画像解析装置を1拠点に複数台置ける前提に変更**（§4.5、§5、§6.2.1〜6.2.5、§7、§10 ほか）／0.3 **Cumulocity Edge で管理するデバイスを thin-edge を導入した端末（画像解析装置・外部Gateway）だけに変更**。子デバイスは使わず、**カメラ・画像センシングBOX はデバイスにしない**。どの拠点・BOX・カメラのデータかは、パイプライン・BOXアダプタが**各メッセージのペイロード JSON に識別情報（`site_Code`・`box_Id`・`cam_Id`）として入れ**、REST API で読んだときに判別できるようにする（§6.2.4）。0.2 の配下カメラ一覧（`cam_List`）と IF-16 は廃止／0.4 **IoT 基盤としての位置づけを明記**し、**基盤が提供するものと利用案件が設計時に決めることを分離**（§3.4 新設、§10 に区分列を追加）。**外部Gateway は権限を分けたい単位ごとに配置**する方針に変更（単位は利用案件が決める。外部IDは `extgw-<単位>-<連番>`）。Q-25 は解決／0.5 **「カメラの死活監視は行わない」の範囲を明確化**。基盤の機能として監視しない（thin-edge からカメラを確認しない・カメラは Edge の可用性監視の対象外）という意味で、画像解析パイプライン等が自分で把握したカメラの状態を識別情報付きのデータとして送るのはかまわない。送ったデータは他のデータと同じく Operational Store に保存される（§1、§3.1、§3.4、§4.5.3、§5.2.2）。**図をすべて Mermaid から PlantUML に変更**（§0.3 新設）／0.6 確認事項の回答を反映。**担当境界（Q-01）**：BOXアダプタは当チーム担当外、sm-plugin `model` は当チームが作成（thin-edge に該当する標準プラグインが無いため）し、基盤の責任は**AIモデルを所定フォルダに配置するまで**（切替・再読込はパイプライン側）、エクスポートジョブは不要。**オフロード（IF-10）は当面行わない**（Q-12 解決）。**メール通知は行わない**（Q-17 解決）。**データ（イベント・添付画像）の確認は画面ではなく紐づけ確認アプリで行う**（Q-19 解決）。図中の他文書参照は本書内で整理（Q-21 解決）。**カメラ・BOX の台帳は持たず、参照構成の識別情報を `cam_Id`（カメラ）から `area_Id`（カメラが映している範囲＝エリア）に変更**（Q-27 解決）。**命名規約（案）を §4.5.4 に記載**（Q-05）。**外部アプリ（紐づけ確認アプリ・案件側アプリ）は利用者本人の権限で読む方式に決定**（Q-10。外部トークンの受け付けの PoC 項目と、拠点のインベントリロールを SSO のアクセスマッピングで付ける方針を §6.2.8・§7.4 に記載）（§1、§3、§4.4〜4.9、§5、§6、§7、§9、§10 ほか） |
+| 改版履歴 | 0.1 初版／0.2 **カメラを Cumulocity のデバイスとして扱わない方針に変更**（カメラ情報は画像解析パイプライン・BOXアダプタがまとめて親機器の情報として thin-edge の twin API で送る）、**カメラの死活監視を対象外に変更**、**画像解析装置を1拠点に複数台置ける前提に変更**（§4.5、§5、§6.2.1〜6.2.5、§7、§10 ほか）／0.3 **Cumulocity Edge で管理するデバイスを thin-edge を導入した端末（画像解析装置・外部Gateway）だけに変更**。子デバイスは使わず、**カメラ・画像センシングBOX はデバイスにしない**。どの拠点・BOX・カメラのデータかは、パイプライン・BOXアダプタが**各メッセージのペイロード JSON に識別情報（`site_Code`・`box_Id`・`cam_Id`）として入れ**、REST API で読んだときに判別できるようにする（§6.2.4）。0.2 の配下カメラ一覧（`cam_List`）と IF-16 は廃止／0.4 **IoT 基盤としての位置づけを明記**し、**基盤が提供するものと利用案件が設計時に決めることを分離**（§3.4 新設、§10 に区分列を追加）。**外部Gateway は権限を分けたい単位ごとに配置**する方針に変更（単位は利用案件が決める。外部IDは `extgw-<単位>-<連番>`）。Q-25 は解決／0.5 **「カメラの死活監視は行わない」の範囲を明確化**。基盤の機能として監視しない（thin-edge からカメラを確認しない・カメラは Edge の可用性監視の対象外）という意味で、画像解析パイプライン等が自分で把握したカメラの状態を識別情報付きのデータとして送るのはかまわない。送ったデータは他のデータと同じく Operational Store に保存される（§1、§3.1、§3.4、§4.5.3、§5.2.2）。**図をすべて Mermaid から PlantUML に変更**（§0.3 新設）／0.6 確認事項の回答を反映。**担当境界（Q-01）**：BOXアダプタは当チーム担当外、sm-plugin `model` は当チームが作成（thin-edge に該当する標準プラグインが無いため）し、基盤の責任は**AIモデルを所定フォルダに配置するまで**（切替・再読込はパイプライン側）、エクスポートジョブは不要。**オフロード（IF-10）は当面行わない**（Q-12 解決）。**メール通知は行わない**（Q-17 解決）。**データ（イベント・添付画像）の確認は画面ではなく紐づけ確認アプリで行う**（Q-19 解決）。図中の他文書参照は本書内で整理（Q-21 解決）。**カメラ・BOX の台帳は持たず、参照構成の識別情報を `cam_Id`（カメラ）から `area_Id`（カメラが映している範囲＝エリア）に変更**（Q-27 解決）。**命名規約（案）を §4.5.4 に記載**（Q-05）。**外部アプリ（紐づけ確認アプリ・案件側アプリ）は利用者本人の権限で読む方式に決定**（Q-10。外部トークンの受け付けの PoC 項目と、拠点のインベントリロールを SSO のアクセスマッピングで付ける方針を §6.2.8・§7.4 に記載）（§1、§3、§4.4〜4.9、§5、§6、§7、§9、§10 ほか）／0.7 **Notification 2.0（IF-08）の設定手順を追加**。購読の作成とトークンの発行は基盤の技術ユーザーだけが行い、案件側アプリにはトークンだけを渡す。購読はテナント全体ではなくグループ（または装置）単位で作る。読まれない通知が溜まるとデータ登録が失敗し得るため、基盤で滞留を監視する（§4.4.1、§4.6.2、§6.2.9、§6.2.12、§7.3.1、§7.7、§8、§10 Q-11、付録B） |
 | 担当範囲 | Cumulocity Edge、thin-edge.io（画像解析装置内蔵分・外部Gateway分） |
 | 入力とした資料 | [cumulocity-iot-architecture.drawio](cumulocity-iot-architecture.drawio)（ページ「全体構成(配置構成・レビュー反映)」）**のみ**。同フォルダの他文書は参照していない |
 | 前提にした製品仕様 | Cumulocity Edge **2026** 公式ドキュメント／thin-edge.io **2.0.1** 公式ドキュメント（2026-09-23 時点で確認） |
@@ -361,7 +361,7 @@ thin-edge 公式にも「Cumulocity Edge に接続する場合、機器のロー
 | 保守要員 | グローバル | ソフトウェアリポジトリ登録（Inventory/Binary 作成）、デバイス制御（オペレーション発行）、一括オペレーション | 基盤運用会社（保守端末）【図】 |
 | 閲覧者 | グローバル＋インベントリ | 担当拠点のイベント/アラーム・添付画像・機器情報の参照（紐づけ確認アプリ・案件側アプリ経由。画面での確認はしない） | 紐づけ確認アプリ・案件側アプリの利用者。拠点ごとのインベントリロールは SSO のアクセスマッピングで付ける（§6.2.8） |
 | アラーム対応者 | インベントリ | 担当拠点のアラーム更新（確認・クリア） | 監視担当 |
-| 連携（技術ユーザー） | グローバル | Inventory/イベント/アラーム参照、Notification 2 管理 | Notification 2.0 購読（§6.2.9） |
+| 通知連携（技術ユーザー） | グローバル | Notification 2 の管理（ADMIN）だけ | 基盤の通知用ローカルユーザー（§4.6.2）**だけ**。案件側アプリ・利用者には付けない（§6.2.9） |
 
 - SSO 利用者は**最低限「自分のユーザー管理（Own user management）の READ」**を持つロールが必要（無いとログインできない）。【仕様】
 - 具体的な権限ビットの割付は詳細設計で確定。【要確認 Q-09】
@@ -527,6 +527,7 @@ E --> B: ログイン完了（セッション Cookie）
 | `admin` | management | ブランディング等の管理設定（メールサーバーは設定しない。Q-17） | 同上 |
 | プロビジョニング用 | edge | 機器登録補助（グループ所属付け等）。自己署名証明書方式を採る場合は `tedge cert upload c8y` に「Tenant Manager」ロールが必要【仕様】 | 最小権限 |
 | 監視用 | edge | IF-12 のメタ監視 | 読み取りのみ |
+| 通知用（例 `svc-n2`） | edge | Notification 2.0 の購読の作成・トークンの発行（§6.2.9、§7.3.1） | 通知連携ロールだけを付ける。このロールを持つのはこのユーザーだけ |
 
 - SSO ユーザーは Basic 認証で REST API を使えないため、**自動化処理は必ずローカルの技術ユーザー**を使う（thin-edge 公式のトラブルシュートにも「SSO ユーザーは REST API を使えない」旨の記載）。【仕様】
 - ログイン画面を「SSO のみ」に切り替えると、画面から Basic ログインの選択肢が消える。**SSO が安定稼働するまで切り替えない**。切り替え後に SSO が壊れた場合は、緊急用ローカル admin で REST API を Basic 認証で直接呼んでログイン設定を戻す手順を、事前に検証環境で確認しておく。【提案】【要検証】
@@ -1047,40 +1048,74 @@ BOXアダプタ（source は外部GW `extgw-A01-01`。トピック `te/device/ma
 
 #### 6.2.9 IF-08：Notification 2.0
 
+Notification 2.0 は、Cumulocity が外部へ送りつける方式ではなく、**案件側アプリが Edge に WebSocket（443）でつなぎに来て読む**方式です。基盤（当チーム）は「どのデータをどのトピックに流すか（購読）」を作り、読むための許可証（トークン）を案件側アプリに渡します。【仕様】【提案】
+
 ```plantuml
 @startuml
 autonumber
-participant "案件側アプリ(VM3)" as A
+participant "当チーム\n(通知用ユーザー)" as P
 participant "Cumulocity Edge" as E
-A -> E: POST /notification2/subscriptions（購読の作成・初回のみ）
-A -> E: POST /notification2/token（subscriber, subscription）
-E --> A: トークン
+participant "案件側アプリ(VM3)" as A
+P -> E: POST /notification2/subscriptions（購読の作成・初回のみ）
+P -> E: POST /notification2/token（subscriber, subscription）
+E --> P: トークン
+P -> A: トークンを渡す（期限前に再発行して渡し直す）
 A -> E: WebSocket 接続 wss:~//EDGE_DOMAIN/notification2/consumer/?token=...
 loop 接続中は繰り返し
-  E --> A: 通知メッセージ（先頭に確認応答ID）
-  A -> E: 確認応答IDを送り返す（ack）
+  E --> A: 通知メッセージ（1行目が確認応答ID）
+  A -> E: 処理後に確認応答IDを送り返す（ack）
 end
-note over A, E: ack していない通知は再接続時に再送される（最低1回配送）
+note over E, A: ack していない通知は再接続時に再送される（最低1回配送）
 @enduml
 ```
 
-**購読の例**
+**購読の例**（参照構成。拠点グループごとに作り、同じ `subscription` 名にまとめる）
 ```json
 {
-  "context": "tenant",
-  "subscription": "vm3Alarms",
+  "context": "mo",
+  "source": { "id": "<site-A01 グループの内部ID>" },
+  "subscription": "iapNotify",
   "subscriptionFilter": {
-    "apis": ["alarms", "events"],
+    "apis": ["alarmsWithChildren", "eventsWithChildren"],
     "typeFilter": "'iap_IntrusionAlarm' or 'iap_PersonDetected'"
-  }
+  },
+  "fragmentsToCopy": ["site_Code", "box_Id", "area_Id"]
 }
 ```
 
-- 購読・トークン発行には「Notification 2」の ADMIN 権限が必要。【仕様】
-- 受信側は**冪等に処理**（同じ通知が再送され得る）。トークン期限切れ時の再発行・再接続を実装する。
-- **利用者本人の権限で読む方式（§6.2.8）は、Notification 2.0 には当てはまらない**。購読・トークン発行には Notification 2 の ADMIN 権限が要る【仕様】ため、利用者ごとに購読を持たせるのは現実的でなく、購読は**システム単位**（技術ユーザー）で持つことになる。届く通知は利用者の拠点の権限では絞られない。
-- そこで、**通知は「何かが起きた」という合図としてだけ使い、利用者に見せる内容は利用者本人のトークンで REST から取り直す**ことを推奨する（取り直すときに Cumulocity の権限が効く）。通知の中身をそのまま利用者に見せる場合は、VM3 側で利用者ごとに見せてよい通知かを判定する必要がある。【提案】【要確認 Q-11】
-- ack メッセージの厳密な書式は実装時に公式リファレンスで確認すること。
+**権限の持ち方**
+
+- 購読の作成とトークンの発行には、どちらも「Notification 2」の ADMIN 権限が必要。この権限は範囲を絞れず、持つとインベントリロールに関係なく**テナント内のどのデバイスの通知でも受け取れる**。【仕様】
+- IoT 基盤は複数の案件で1つのテナントを共有するため、この権限を案件側アプリに渡すと他案件のデータまで読めてしまう。そこで、**この権限は当チームの通知用ユーザー（§4.6.2）だけが持ち、案件側アプリにはトークンだけを渡す**。トークンは発行時に指定した1つのトピックにしか使えない。【仕様】【提案】
+- トークンの渡し方は、当面は**当チームが期限を長め（例：90日）にして発行し、期限前に再発行して渡す**。案件が増えて再発行の手間が大きくなったら、案件側アプリが Keycloak で認証してトークンを受け取る仕組みを検討する。【提案】【要確認 Q-11】
+- トークンの期限が切れても接続中は切れないが、**再接続には有効なトークンが要る**。WebSocket は5分間通信が無いと切断されるため、期限切れはそのまま通知の停止になる。【仕様】
+- **利用者本人の権限で読む方式（§6.2.8）は、Notification 2.0 には当てはまらない**。届く通知は利用者の拠点の権限では絞られない。そこで、**通知は「何かが起きた」という合図としてだけ使い、利用者に見せる内容は利用者本人のトークンで REST から取り直す**ことを推奨する（取り直すときに Cumulocity の権限が効く）。通知の中身をそのまま利用者に見せる場合は、VM3 側で利用者ごとに見せてよい通知かを判定する必要がある。【提案】【要確認 Q-11】
+
+**購読の作り方**【提案】
+
+- **トピックは受け取るアプリ（案件）ごとに1つ**。購読はその案件のグループ（参照構成では拠点グループ）ごとに作り、同じ `subscription` 名にまとめる（同じ名前の購読は同じトピックに流れる【仕様】）。
+- **`context: tenant` は使わない**（テナント全体が対象になり、他案件のデータも流れる）。
+- グループを `source` にして `alarmsWithChildren`／`eventsWithChildren` で配下の装置の通知を拾う。ただし、グループの配下（グループに入れた装置）まで辿るかは公式に書かれていないため、受入確認（AT-12）で確かめる。拾えない場合は、**装置（`iap-…`・`extgw-…`）ごとに購読を作って同じ名前にまとめ**、装置を追加するたびに購読も追加する。【要検証】
+- `subscription` 名は**英数字だけ**（ハイフン不可）。【仕様】 §4.5.4 の命名規約とは別に、例えば `<接頭辞>Notify`（`iapNotify`）とする。
+- `typeFilter` は完全一致を `or` でつなぐ形だけで、前方一致はできない。【仕様】 §6.2.1 の案B（タイプ名の末尾に値を付ける）を使う案件では `typeFilter` を付けず、`apis` だけで絞る。
+- `fragmentsToCopy` で識別情報だけを通知に載せる（独自の項目は指定したものだけが残る）。【仕様】 業務データを通知に流さずに済む。
+
+**案件側アプリに守ってもらうこと**【仕様】
+
+| 項目 | 内容 |
+|---|---|
+| メッセージの形 | 1行目が確認応答ID、続いてヘッダー行（`/<テナント>/<種類>/<送信元ID>`、`CREATE`／`UPDATE`／`DELETE`）、空行、本文（JSON）。ヘッダーは空行まで読み、行数を決め打ちしない |
+| ack | **処理が終わってから**、1行目をそのまま（引用符・改行なし）同じ接続で送り返す。まとめての ack はできない。未 ack が 1000 件溜まると配信が止まる |
+| 接続の維持 | 5分間通信が無いとサーバーから切断される。ping を送るか、切断されたら再接続する |
+| 重複 | 同じ通知が再送され得るので**冪等に処理**する。同じ装置・同じタイプの ACTIVE なアラームは1件にまとまり、`UPDATE` として届く（§4.5.3） |
+| 冗長化 | 同じトークンで2台から同時に接続しない（2台目はエラー。`shared` は負荷分散で、通知が2台に振り分けられる）。Active/Standby にする |
+| 停止・廃止 | 長期に止める・廃止するときは当チームへ連絡する（下記の滞留を防ぐため） |
+
+**滞留に注意（基盤としての責任）**
+
+- 受信者（subscriber）は最初の接続時に作られ、切断しても消えない。読まれない通知はトピックごとに溜まり、上限（クラウドの既定値：25 MiB または 36 時間）に達すると、**そのトピックに流れるはずのデータの登録 API が 500 エラーになる**。【仕様】 つまり、案件側アプリが止まると、thin-edge からのイベント・アラームの登録が失敗し始めるおそれがある。
+- そのため当チームが Administration → Monitoring → Messaging Service で滞留を監視し（§6.2.12）、不要になった受信者を解除（`POST /notification2/unsubscribe`）する。Edge での上限値は公式ドキュメントに記載がないため、同画面の表示で確認する。【提案】【要確認 Q-11】
+- 設定手順は §7.3.1。
 
 #### 6.2.10 IF-09：SSO/OIDC（Keycloak 連携）
 
@@ -1117,6 +1152,7 @@ note over A, E: ack していない通知は再接続時に再送される（最
 | IF-11 | Edge のログ | 標準は内部の Fluentd に永続化。Otel への転送方法は要検討 |
 | IF-12 | Edge 外形監視 | ① `https://<EDGE_DOMAIN>/` の応答 ② 8883 の TLS 接続可否 ③ 監視用ユーザーで `GET /tenant/currentTenant` の応答 |
 | IF-12 | 機器の死活 | Edge の可用性（ハートビート途絶）を Smart Rules でアラーム化 |
+| IF-12 | Notification 2.0 の滞留 | Administration → Monitoring → Messaging Service で受信者ごとの滞留を確認（§6.2.9）。公式の危険域は Used backlog 80% 超、未 ack 1000 件超、最終 ack が1日以上前。閲覧には「テナント統計」の READ が必要。画面は Public Preview で、裏の API は非公開のため、当面は定期的な目視確認とする【仕様】【提案】 |
 | IF-18 | thin-edge のログ | 装置上の Alloy で journald（`tedge-mapper-c8y`、`tedge-agent`、`mosquitto`、プローブ）を収集し Otel へ（図に線なし） |
 
 ### 6.3 通信要件（FW 設計の入力）
@@ -1214,7 +1250,25 @@ end fork
 | T-7 | ローカル技術ユーザー | edge：Administration | §4.6.2 の表のとおり作成、最小権限 |
 | T-8 | ソフトウェアリポジトリ規約 | − | §4.5.4 (6) のタイプ・名前・版の規約を保守手順書へ |
 | T-9 | Smart Rules | edge：Cockpit（Smart Rules） | アラームを作るルールだけ（要件次第）。メール・SMS で知らせるルールは使わない（Q-17 解決） |
-| T-10 | Notification 2.0 用ユーザー | edge：Administration | 「Notification 2」ADMIN を持つ技術ユーザー（Q-11 の結論次第） |
+| T-10 | Notification 2.0 | edge：Administration ほか | 通知連携ロールと通知用ユーザーを作り、案件ごとに購読を作ってトークンを渡す（§7.3.1） |
+
+#### 7.3.1 Notification 2.0 の設定手順（T-10）【提案】
+
+案件側アプリが通知を受け取れるようにするまでの手順です（方針は §6.2.9）。Edge 2026 には土台の Messaging Service が同梱されており、有効化のための設定・導入作業はありません。【仕様】 以下の例は参照構成（案件の接頭辞 `iap`、グループ `site-A01`）です。
+
+| # | 作業 | 操作（例） | 確認方法 |
+|---|---|---|---|
+| N-1 | Messaging Service の稼働確認 | `kubectl get pods -n c8yedge` | Messaging Service 関連の Pod が Running（Pod 名は実施時に記録し手順書へ反映） |
+| N-2 | ロールと通知用ユーザーの作成 | Administration でグローバルロール「通知連携」（権限「Notification 2」の ADMIN のみ）を作り、ローカルユーザー `svc-n2` に付ける（§4.4.1、§4.6.2） | `svc-n2` で `GET /notification2` が 200 |
+| N-3 | 購読の作成 | グループごとに §6.2.9 の JSON をファイルにし、`curl -u "svc-n2:<パスワード>" -H "Content-Type: application/json" -H "Accept: application/json" -X POST https://<EDGE_DOMAIN>/notification2/subscriptions -d @<ファイル>`。`source` はグループの**内部ID**（Device Management でグループを開いたときの URL の数字） | 201 が返り、`GET /notification2/subscriptions?subscription=iapNotify` に出る |
+| N-4 | 受信試験 | go-c8y-cli（`svc-n2` のセッション）で `c8y notification2 subscriptions subscribe --name iapNotify --subscriber n2test01 --duration 10min` を実行し、装置で §7.5 D-10 と同様に試験イベントを送る | 試験イベントが届く。届かなければ装置を `source` にした購読で切り分ける（§6.2.9） |
+| N-5 | 再送試験 | N-4 の受信を止めて試験イベントを送り、同じ `--subscriber` で再接続 | 止めていた間のイベントが届く |
+| N-6 | 試験用受信者の解除 | `c8y notification2 tokens create --name iapNotify --subscriber n2test01` で得たトークンで `c8y notification2 tokens unsubscribe --token <トークン>` | Monitoring → Messaging Service の受信者一覧から `n2test01` が消える。同画面で上限値を確認し記録 |
+| N-7 | 本番用トークンの発行と引き渡し | `POST /notification2/token`（本文例 `{"subscriber":"iapApp","subscription":"iapNotify","expiresInMinutes":129600}`＝90日）。試験用と別の `subscriber` 名にする | 案件側アプリで受信・ack できる（AT-12） |
+
+- 試験用の受信者は必ず N-6 で解除する（残すと通知が溜まり続け、上限に達するとデータ登録が失敗する。§6.2.9）。
+- 装置ごとに購読する方式になった場合（§6.2.9）は、§7.5 D-7 で装置をグループに入れるときに、その装置の購読（N-3）も追加する。
+- トークンの期限は一覧で管理し、期限前に再発行して渡し直す。案件側アプリを廃止したら、受信者を解除し購読を削除する（`DELETE /notification2/subscriptions/<ID>`）。
 
 ### 7.4 Keycloak 連携（SSO）設定
 
@@ -1300,7 +1354,7 @@ BOX の登録作業は無い（BOX は thin-edge にも Edge にも登録しな�
 | AT-09 | モデル配布 | 正常なモデルで SUCCESSFUL になり、所定フォルダ `<モデル格納>/<NAME>/<V>/` に置かれ、ソフトウェア一覧に名前・版が出る。チェックサム不一致などのモデルで FAILED になり、所定フォルダに書きかけのファイルが残らず、既存のモデルがそのまま残る（切替・再読込はパイプライン側の試験） |
 | AT-10 | 一括配布 | 拠点グループへの一括オペレーションが全装置で完了 |
 | AT-11 | BOX | BOX イベントが外部GW のイベントとして表示され、`site_Code`・`box_Id` の値検索で拠点別・BOX 別に取り出せる。重複なし |
-| AT-12 | 外部 API | ①IF-06/07 を利用者本人の Keycloak トークンで呼ぶと、**担当拠点のデータだけが取れ、他の拠点のデータは取れない**（拠点のインベントリロールがアクセスマッピングで付いている） ②外部トークンの受け付けを有効にした状態で、thin-edge 経由の画像付きイベント・添付（IF-02/IF-14）と AIモデルのダウンロードが動く（§6.2.8 PoC 項目4） ③IF-08 の通知受信と ack、再接続時の再送 |
+| AT-12 | 外部 API | ①IF-06/07 を利用者本人の Keycloak トークンで呼ぶと、**担当拠点のデータだけが取れ、他の拠点のデータは取れない**（拠点のインベントリロールがアクセスマッピングで付いている） ②外部トークンの受け付けを有効にした状態で、thin-edge 経由の画像付きイベント・添付（IF-02/IF-14）と AIモデルのダウンロードが動く（§6.2.8 PoC 項目4） ③IF-08 の通知受信と ack、再接続時の再送。グループを `source` にした購読で、グループに入れた装置の通知が届く（届かなければ装置ごとの購読に切り替える。§6.2.9）。試験用の受信者が残っていない（§7.3.1 N-6） |
 | AT-13 | 保持 | 保持ルールが §4.7 の日数で種別ごとに設定されている（オフロードは当面行わない） |
 | AT-14 | 監視 | メトリクス取得、外形監視、ログ取得手順が動く |
 | AT-15 | バックアップ・リストア | 検証環境でリストアし同一データで起動する |
@@ -1315,6 +1369,7 @@ BOX の登録作業は無い（BOX は thin-edge にも Edge にも登録しな�
 | アップグレード | Edge はメジャー版を1つずつ。停止を伴うため計画停止とし、機器側のバッファ容量内に収める。thin-edge は版を固定し、Edge のソフトウェア配布（`tedge-full` パッケージ）で更新可能【仕様】 |
 | バックアップ | `/var/lib/rancher/k3s` を定期保全。リストア訓練を年1回以上【提案】 |
 | 容量監視 | Edge のディスク・MongoDB 使用量（スナップショットで増える）。装置のディスク（モデル DL、ローカル再送キュー） |
+| Notification 2.0 | 滞留の定期確認（§6.2.12）、トークンの期限管理と再発行、廃止した案件側アプリ・試験用の受信者の解除（§7.3.1）。案件側アプリが長く止まると通知が溜まり、上限に達するとデータ登録が失敗するため、案件側と停止時の連絡を取り決める（§6.2.9） |
 | 障害切り分けの入口 | 装置：`tedge connect c8y --test`、`journalctl -u tedge-mapper-c8y`、`tedge mqtt sub 'te/#'`。Edge：ログ一括取得コマンド（§4.10） |
 
 ---
@@ -1348,7 +1403,7 @@ BOX の登録作業は無い（BOX は thin-edge にも Edge にも登録しな�
 | Q-08 | 基盤 | デバイス証明書方式（CA＋自動登録）、CA 運用者、有効期間・更新手順。Cumulocity 認証局方式の Edge 対応可否 | 4.6.3 | 当チーム・CA 運用者 | 中 |
 | Q-09 | 基盤 | SSO のユーザーIDクレーム、ロールクレーム、**拠点の権限を表すクレーム**（アクセスマッピングでインベントリロールを付けるため）の設計、Keycloak の設定担当 | 4.4.1, 6.2.8, 7.4 | Keycloak 担当 | 高 |
 | Q-10 | 基盤 | 外部アプリ（紐づけ確認アプリ・案件側アプリ）の認可方式。**方式は決定（0.6 版）**：利用者本人の権限で読む（読み取り専用のサービスアカウントでは、インベントリロールによる範囲を利用者ごとに効かせられないため）。**残り**：外部トークンの受け付けの PoC（§6.2.8 の項目1〜5。特に項目4：Cumulocity 発行の JWT を使う thin-edge の通信に影響が出ないこと） | 6.2.7, 6.2.8, 7.4 | 当チーム（PoC）・各アプリ担当 | 高 |
-| Q-11 | 基盤／利用案件 | Notification 2.0 の購読主体・フィルタ・VM3 側での権限制御。推奨案：購読はシステム単位で持ち、通知は合図として使い、利用者に見せる内容は利用者本人のトークンで REST から取り直す（§6.2.9） | 6.2.9 | 案件側アプリ担当 | 中 |
+| Q-11 | 基盤／利用案件 | Notification 2.0。**0.7 版の案**：購読の作成とトークンの発行は当チームの通知用ユーザーだけが行い、案件側アプリにはトークンだけを渡す。購読はグループ（または装置）単位で案件ごとのトピックにまとめる。通知は合図として使い、利用者に見せる内容は利用者本人のトークンで REST から取り直す（§6.2.9、§7.3.1）。**残り**：①この案で案件側と合意できるか（トークンの渡し方・期限、停止時の連絡、購読するタイプ）②グループを `source` にして配下の装置の通知が届くか③長い期限（例：90日）のトークンを Edge が受け付けるか④通知連携ロールが ADMIN だけで足りるか⑤Edge での滞留の上限値（公式ドキュメントに記載なし） | 6.2.9, 7.3.1 | 案件側アプリ担当・当チーム（検証） | 中 |
 | Q-12 | 解決 | ~~オフロードの方式・実行場所・担当、アラーム状態変化の扱い~~ → **解決（0.6 版）**：現時点ではオフロードの予定がないため行わない。保持期間を過ぎたデータは消える（§4.7、§6.2.11） | 4.7, 6.2.11 | − | − |
 | Q-13 | 基盤 | Otel 連携の範囲（Edge のメトリクス・ログ、thin-edge のログ）とメトリクスの認証 | 6.2.12 | Otel 担当 | 低 |
 | Q-14 | 基盤 | ストア&フォワードの要求値（最大断時間・最大件数）と、mosquitto／内蔵ブリッジでの実現確認 | 5.5 | 当チーム（PoC） | 高 |
@@ -1406,5 +1461,5 @@ BOX の登録作業は無い（BOX は thin-edge にも Edge にも登録しな�
 - Cumulocity Edge 2026：[概要](https://cumulocity.com/docs/2026/edge/edge-introduction/)／[インストール](https://cumulocity.com/docs/2026/edge/installing-edge/)／[Edge カスタムリソース](https://cumulocity.com/docs/2026/edge/edge-custom-resource-definition/)／[Edge の管理](https://cumulocity.com/docs/2026/edge/manage-edge/)／[運用（ログ・バックアップ・監視）](https://cumulocity.com/docs/2026/edge/edge-operations/)／[ベンチマーク](https://cumulocity.com/docs/2026/edge/benchmarks/)
 - Cumulocity 認証：[シングルサインオン](https://cumulocity.com/docs/2026/authentication/sso/)
 - Cumulocity API：[Core OpenAPI 仕様（`GET /event/events` の `fragmentType`／`fragmentValue`、`withSourceAssets`）](https://cumulocity.com/api/core/dist/c8y-oas.yml)
-- Notification 2.0：[Cumulocity Tech Community 手順解説](https://community.cumulocity.com/t/step-by-step-instruction-for-cumulocity-notification-2-0/3993)、[Edge での利用に関するスレッド](https://community.cumulocity.com/t/how-to-inspect-notification-2-0-topics-and-consumers-on-cumulocity-edge/15107)（実装時は公式リファレンスで再確認）
+- Notification 2.0（2026-09-28 確認）：[概要（権限・購読・トークン・受信者の扱い）](https://cumulocity.com/docs/notifications/notifications-overview/)／[受信プロトコル（ack・5分の切断・未 ack の上限）](https://cumulocity.com/docs/notifications/consumer-protocol/)／[サービス上限（滞留 25 MiB・36 時間）](https://cumulocity.com/docs/service-terms/quotas/)／[監視（Messaging Service 画面）](https://cumulocity.com/docs/standard-tenant/monitoring/)／Core OpenAPI の `NotificationSubscription`・`NotificationTokenClaims`／[Cumulocity Tech Community 手順解説](https://community.cumulocity.com/t/step-by-step-instruction-for-cumulocity-notification-2-0/3993)、[Edge での利用に関するスレッド（監視画面は Edge 2026 から、Public Preview）](https://community.cumulocity.com/t/how-to-inspect-notification-2-0-topics-and-consumers-on-cumulocity-edge/15107)／[go-c8y-cli の notification2 コマンド](https://goc8ycli.netlify.app/docs/cli/c8y/notification2/c8y_notification2/)
 - thin-edge.io 2.0.1：[インストール](https://thin-edge.github.io/thin-edge.io/install/)／[Cumulocity への接続](https://thin-edge.github.io/thin-edge.io/start/connect-c8y/)／[クラウド認証（Edge の証明書）](https://thin-edge.github.io/thin-edge.io/operate/security/cloud-authentication/)／[MQTT API](https://thin-edge.github.io/thin-edge.io/references/mqtt-api/)／[thin-edge JSON（計測の `properties`）](https://thin-edge.github.io/thin-edge.io/understand/thin-edge-json/)／[エンティティ REST API](https://thin-edge.github.io/thin-edge.io/operate/entity-management/rest_api/)／[Cumulocity マッパー](https://thin-edge.github.io/thin-edge.io/references/mappers/c8y-mapper/)／[Cumulocity プロキシ](https://thin-edge.github.io/thin-edge.io/references/cumulocity-proxy/)／[ファイル転送サービス](https://thin-edge.github.io/thin-edge.io/references/file-transfer-service/)／[ファイルのアップロード](https://thin-edge.github.io/thin-edge.io/operate/c8y/upload-files/)／[可用性監視](https://thin-edge.github.io/thin-edge.io/operate/c8y/device-availability/)／[ソフトウェア管理](https://thin-edge.github.io/thin-edge.io/operate/c8y/software-management/)／[ソフトウェア管理プラグイン API](https://thin-edge.github.io/thin-edge.io/references/software-management-plugin-api/)／[mosquitto 設定](https://thin-edge.github.io/thin-edge.io/operate/configuration/mosquitto-configuration/)／[内蔵ブリッジ](https://thin-edge.github.io/thin-edge.io/references/mappers/configurable-bridge/)／[tedge cert](https://thin-edge.github.io/thin-edge.io/references/cli/tedge-cert/)
